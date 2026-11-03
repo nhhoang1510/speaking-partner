@@ -70,13 +70,14 @@ export class Engine {
   llm() { return { provider: this.settings.provider, url: this.settings.url, model: this.settings.model }; }
 
   // ---------------- conversation ----------------
-  start(scene) {
+  // memory: a short note about earlier sessions in this room, so the character remembers the learner
+  start(scene, memory) {
     this.stopAll();
     speechSynthesis.speak(new SpeechSynthesisUtterance(' '));   // iOS: speech must be unlocked inside the tap
     if (!this.audio) this.audio = new Audio();
     this.audio.src = SILENT_WAV; this.audio.play().catch(() => {});
     this.ttsOff = false;
-    this.history = [{ role: 'system', content: systemPrompt(scene, this.settings.level) }, { role: 'user', content: OPENER }];
+    this.history = [{ role: 'system', content: systemPrompt(scene, this.settings.level) + (memory ? '\n\n' + memory : '') }, { role: 'user', content: OPENER }];
     this.turns = []; this.fixes = []; this.lastAi = '';
     this.s.msgs = []; this.set({ scene, summary: null });
     this.aiTurn();
