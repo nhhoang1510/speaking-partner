@@ -15,8 +15,8 @@ export function saveMe(name, color) {
   return me;
 }
 
-// the free Redis plan counts every command: poll fast only while the 3D room is open
-const HEARTBEAT_MS = 20000, POLL_FAST_MS = 3000, POLL_SLOW_MS = 20000;
+// the free Redis plan counts every command: poll gently, and not at all while the page is hidden
+const HEARTBEAT_MS = 20000, POLL_FAST_MS = 4000, POLL_SLOW_MS = 20000;
 
 export class Room {
   constructor() {
