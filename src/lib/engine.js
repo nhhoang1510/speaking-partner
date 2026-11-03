@@ -8,6 +8,20 @@ export const canListen = !!SR;
 // phones: continuous recognition repeats words on Android, so one utterance per session there
 const MOBILE = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
+// one silent sample: playing it inside the tap unlocks the audio element for later replies (iOS)
+const SILENT_WAV = 'data:audio/wav;base64,UklGRiYAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQIAAAAAAA==';
+
+// long sentences are cut at commas/spaces: the cloud voice takes at most 200 characters at a time
+function chunks(t, max = 190) {
+  const out = [];
+  while (t.length > max) {
+    let i = t.lastIndexOf(', ', max); if (i < 40) i = t.lastIndexOf(' ', max); if (i < 1) i = max;
+    out.push(t.slice(0, i + 1).trim()); t = t.slice(i + 1).trim();
+  }
+  if (t) out.push(t);
+  return out;
+}
+
 export function cleanSpoken(t) {
   return t.replace(/\*[^*]*\*/g, '').replace(/[#_`~>]/g, '')
           .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '').replace(/[ \t]+/g, ' ').trim();
@@ -35,6 +49,7 @@ export class Engine {
     this.abort = null; this.streaming = false; this.speakQ = 0; this.utts = [];
     this.rec = null; this.recText = ''; this.recTimer = null; this.recWanted = false; this.interim = null;
     this.idc = 0;
+    this.audio = null; this.ttsQ = []; this.ttsGen = 0; this.ttsBusy = false; this.ttsAbort = null; this.ttsOff = false;
   }
 
   emit() { this.onChange({ ...this.s, msgs: [...this.s.msgs] }); }
@@ -49,6 +64,9 @@ export class Engine {
   start(scene) {
     this.stopAll();
     speechSynthesis.speak(new SpeechSynthesisUtterance(' '));   // iOS: speech must be unlocked inside the tap
+    if (!this.audio) this.audio = new Audio();
+    this.audio.src = SILENT_WAV; this.audio.play().catch(() => {});
+    this.ttsOff = false;
     this.history = [{ role: 'system', content: systemPrompt(scene, this.settings.level) }, { role: 'user', content: OPENER }];
     this.turns = []; this.fixes = []; this.lastAi = '';
     this.s.msgs = []; this.set({ scene, summary: null });
@@ -57,6 +75,7 @@ export class Engine {
 
   async aiTurn() {
     this.set({ phase: 'thinking', status: `${this.s.scene.name} đang nghĩ…` });
+    this.ttsOff = false;                                  // retry the cloud voice each turn
     const m = this.add({ who: 'ai', text: '' });
     this.abort = new AbortController(); this.streaming = true;
     let full = '', buf = '';
@@ -91,9 +110,55 @@ export class Engine {
   typed(text) { if (!this.s.scene || !text.trim()) return; this.stopAll(); this.learnerSaid(text.trim()); }
 
   // ---------------- speech out ----------------
+  // natural cloud voice (Groq Orpheus) when available, else the device's own voice
   say(text, rate) {
     text = cleanSpoken(text); if (!text) return;
     if (this.s.phase === 'thinking') this.set({ phase: 'speaking' });
+    if (this.settings.speech === 'cloud' && !this.ttsOff && this.audio) { chunks(text).forEach(c => this.sayCloud(c, rate)); return; }
+    this.sayDevice(text, rate);
+  }
+
+  sayCloud(text, rate) {
+    if (!this.ttsAbort) this.ttsAbort = new AbortController();
+    const voice = (this.s.scene && this.s.scene.voice) || 'hannah';
+    // fetch right away so the next sentence is ready while this one plays
+    const audio = fetch('/api/tts', { method: 'POST', signal: this.ttsAbort.signal, headers: { 'content-type': 'application/json' },
+                                      body: JSON.stringify({ text, voice }) })
+      .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); });
+    audio.catch(() => {});
+    this.speakQ++; this.ttsQ.push({ text, rate, audio });
+    if (this.s.scene) this.status(`${this.s.scene.name} đang nói… (Space để ngắt lời)`);
+    if (!this.ttsBusy) this.playNext();
+  }
+
+  async playNext() {
+    const job = this.ttsQ.shift();
+    if (!job) { this.ttsBusy = false; this.maybeDone(); return; }
+    this.ttsBusy = true;
+    const gen = this.ttsGen;
+    try {
+      const blob = await job.audio;
+      if (gen !== this.ttsGen) return;
+      const url = URL.createObjectURL(blob), a = this.audio;
+      await new Promise((resolve, reject) => {
+        a.onended = resolve; a.onerror = () => reject(new Error('audio'));
+        a.src = url; a.playbackRate = job.rate || this.settings.rate || 1;
+        a.play().catch(reject);
+      }).finally(() => URL.revokeObjectURL(url));
+    } catch (e) {
+      if (gen !== this.ttsGen) return;
+      // quota used up or no network: finish this reply with the device voice
+      this.ttsOff = true;
+      [job, ...this.ttsQ].forEach(j => this.sayDevice(j.text, j.rate));
+      this.speakQ = Math.max(0, this.speakQ - 1 - this.ttsQ.length); this.ttsQ = []; this.ttsBusy = false;
+      return;
+    }
+    if (gen !== this.ttsGen) return;
+    this.speakQ = Math.max(0, this.speakQ - 1);
+    this.playNext();
+  }
+
+  sayDevice(text, rate) {
     const u = new SpeechSynthesisUtterance(text);
     const v = speechSynthesis.getVoices().find(x => x.name === this.settings.voice);
     if (v) { u.voice = v; u.lang = v.lang; } else u.lang = 'en-US';
@@ -104,7 +169,12 @@ export class Engine {
     speechSynthesis.speak(u);
   }
   replay(text, rate) { this.stopListening(); this.cancelSpeech(); this.say(text, rate); }
-  cancelSpeech() { this.speakQ = 0; this.utts = []; speechSynthesis.cancel(); }
+  cancelSpeech() {
+    this.speakQ = 0; this.utts = []; speechSynthesis.cancel();
+    this.ttsGen++; this.ttsQ = []; this.ttsBusy = false;
+    if (this.ttsAbort) { this.ttsAbort.abort(); this.ttsAbort = null; }
+    if (this.audio) { this.audio.onended = this.audio.onerror = null; this.audio.pause(); }
+  }
 
   maybeDone() {
     if (this.streaming || this.speakQ > 0) return;
