@@ -1,8 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, MotionConfig, useMotionValue, useSpring } from 'framer-motion';
 import { Engine, canListen } from './lib/engine.js';
 import { checkAI } from './lib/llm.js';
 import { SCENES, LEVELS } from './scenes.js';
+import { Room, COLORS, loadMe, saveMe } from './lib/room.js';
+
+const Room3D = lazy(() => import('./Room3D.jsx'));
 
 const LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname);
 // the AI is chosen by where the page runs, not by the user: the deployed site uses the cloud,
@@ -35,6 +38,12 @@ export default function App() {
   if (!engine.current) engine.current = new Engine(setSt);
   const eng = engine.current;
   const voices = useVoices();
+  const roomRef = useRef(null);
+  if (!roomRef.current) roomRef.current = new Room();
+  const room = roomRef.current;
+  const [me, setMe] = useState(loadMe);
+  const [online, setOnline] = useState({ ok: null, n: 0 });
+  const [roomOpen, setRoomOpen] = useState(false);
 
   const set = patch => setCfg(c => ({ ...c, ...patch }));
   useEffect(() => {
@@ -78,13 +87,25 @@ export default function App() {
 
   const s = st || eng.s;
 
+  // the classroom: check in who I am and what I'm doing, and count who else is online
+  useEffect(() => { if (me) room.setMe(me); }, [me]);
+  useEffect(() => room.subscribe((users, ok) => setOnline({ ok, n: users.length })), []);
+  const saidRef = useRef({ text: '', at: 0 });
+  useEffect(() => {
+    const mine = [...s.msgs].reverse().find(m => m.who === 'me');
+    const text = mine ? mine.text.replace(/^…$/, '') : '';
+    if (text !== saidRef.current.text) saidRef.current = { text, at: Date.now() };
+    room.update({ scene: s.scene ? s.scene.id : null, phase: s.summary ? 'summary' : s.phase,
+                  said: s.scene ? saidRef.current.text : '', saidAt: saidRef.current.at, turns: eng.turns.length });
+  }, [s]);
+
   return (
     <MotionConfig reducedMotion="user">
       <Backdrop hue={s.scene ? s.scene.hue : 150} />
       <AnimatePresence>{booting && <Preloader key="pre" />}</AnimatePresence>
 
       <div className="shell">
-        <TopBar s={s} onSettings={() => setPanel(true)} onBack={() => eng.leave()} onEnd={() => eng.end()} />
+        <TopBar s={s} online={online} onRoom={() => setRoomOpen(true)} onSettings={() => setPanel(true)} onBack={() => eng.leave()} onEnd={() => eng.end()} />
         <AnimatePresence mode="wait">
           {!s.scene
             ? <Home key="home" cfg={cfg} set={set} ready={!booting} onPick={sc => eng.start(sc)} ai={ai} />
@@ -94,6 +115,15 @@ export default function App() {
 
       <AnimatePresence>
         {panel && <Settings key="set" cfg={cfg} set={set} onClose={() => setPanel(false)} />}
+      </AnimatePresence>
+
+      {roomOpen && (
+        <Suspense fallback={<div className="r3 r3-loading">Đang mở lớp học…</div>}>
+          <Room3D room={room} me={me} onClose={() => setRoomOpen(false)} />
+        </Suspense>
+      )}
+      <AnimatePresence>
+        {!booting && online.ok && !me && <Join key="join" onJoin={(n, c) => setMe(saveMe(n, c))} />}
       </AnimatePresence>
     </MotionConfig>
   );
@@ -121,7 +151,7 @@ function Preloader() {
   );
 }
 
-function TopBar({ s, onSettings, onBack, onEnd }) {
+function TopBar({ s, online, onRoom, onSettings, onBack, onEnd }) {
   return (
     <header className="topbar">
       <div className="brand">
@@ -135,6 +165,11 @@ function TopBar({ s, onSettings, onBack, onEnd }) {
         <span className="brand-name">Speaking Partner</span>
       </div>
       <div className="top-right">
+        {online.ok && (
+          <button className="ghost room-btn" onClick={onRoom} aria-label={`Lớp học, ${online.n} người online`}>
+            <i /><span className="wide">Lớp học</span><b>{online.n}</b>
+          </button>
+        )}
         {s.scene && <button className="ghost" onClick={onEnd}><span className="wide">Kết thúc &amp; nhận xét</span><span className="narrow">Kết thúc</span></button>}
         <button className="iconbtn" onClick={onSettings} aria-label="Cài đặt">
           <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3h-4l-.4 2.9a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.4 7.4 0 0 0 1.7 1L11 21h4l.4-2.9a7.4 7.4 0 0 0 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)" /></svg>
@@ -313,6 +348,31 @@ function TypeBox({ onSend }) {
     <form className="type" onSubmit={e => { e.preventDefault(); onSend(t); setT(''); }}>
       <input value={t} onChange={e => setT(e.target.value)} placeholder="Hoặc gõ câu trả lời…" autoComplete="off" aria-label="Gõ câu trả lời" />
     </form>
+  );
+}
+
+// ---------------------------------------------------------------- joining the classroom
+function Join({ onJoin }) {
+  const [name, setName] = useState('');
+  const [color, setColor] = useState(COLORS[Math.floor(Math.random() * COLORS.length)]);
+  const go = e => { e.preventDefault(); if (name.trim()) onJoin(name, color); };
+  return (
+    <>
+      <motion.div className="scrim" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />
+      <motion.form className="join" onSubmit={go} initial={{ opacity: 0, y: 24, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 16 }} transition={spring}>
+        <h2>Vào lớp học</h2>
+        <p>Mọi người trong lớp sẽ thấy tên và nhân vật của bạn.</p>
+        <input className="txt" autoFocus maxLength={24} placeholder="Tên của bạn" value={name} onChange={e => setName(e.target.value)} />
+        <div className="swatches" role="radiogroup" aria-label="Màu nhân vật">
+          {COLORS.map(c => (
+            <button type="button" key={c} role="radio" aria-checked={c === color} aria-label={c} className={c === color ? 'on' : ''}
+              style={{ background: c }} onClick={() => setColor(c)} />
+          ))}
+        </div>
+        <button className="primary" disabled={!name.trim()}>Vào lớp</button>
+      </motion.form>
+    </>
   );
 }
 
