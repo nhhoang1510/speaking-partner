@@ -5,7 +5,7 @@ import { checkAI } from './lib/llm.js';
 import { SCENES, LEVELS } from './scenes.js';
 
 const LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname);
-const DEFAULTS = { provider: LOCAL ? 'ollama' : 'cloud', url: 'http://localhost:11434', model: 'llama3.2:3b', level: 'intermediate', speech: LOCAL ? 'device' : 'cloud', voice: '', rate: 1, pause: 1.4, showAi: true, feedback: true };
+const DEFAULTS = { provider: LOCAL ? 'ollama' : 'cloud', url: 'http://localhost:11434', model: 'llama3.2:3b', level: 'intermediate', voice: '', rate: 1, pause: 1.4, showAi: true, feedback: true };
 const spring = { type: 'spring', stiffness: 260, damping: 26 };
 
 function loadSettings() {
@@ -90,7 +90,7 @@ export default function App() {
       </div>
 
       <AnimatePresence>
-        {panel && <Settings key="set" cfg={cfg} set={set} voices={voices} ai={ai} onClose={() => setPanel(false)} />}
+        {panel && <Settings key="set" cfg={cfg} set={set} ai={ai} onClose={() => setPanel(false)} />}
       </AnimatePresence>
     </MotionConfig>
   );
@@ -318,27 +318,12 @@ function TypeBox({ onSend }) {
 }
 
 // ---------------------------------------------------------------- settings drawer
-function Settings({ cfg, set, voices, ai, onClose }) {
+function Settings({ cfg, set, ai, onClose }) {
   return (
     <>
       <motion.div className="scrim" onClick={onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />
       <motion.aside className="drawer" role="dialog" aria-label="Cài đặt" initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', stiffness: 300, damping: 34 }}>
         <div className="drawer-head"><h2>Cài đặt</h2><button className="iconbtn" onClick={onClose} aria-label="Đóng">✕</button></div>
-
-        <h3 className="drawer-sec">Giọng AI</h3>
-        <div className="levels full" role="radiogroup" aria-label="Giọng AI">
-          {[['cloud', 'Tự nhiên (cloud)'], ['device', 'Giọng của máy']].map(([k, label]) => (
-            <button key={k} role="radio" aria-checked={cfg.speech === k} className={'seg' + (cfg.speech === k ? ' on' : '')} onClick={() => set({ speech: k })}>
-              {cfg.speech === k && <motion.span layoutId="seg-voice" className="seg-bg" transition={spring} />}
-              <span className="seg-t">{label}</span>
-            </button>
-          ))}
-        </div>
-        {cfg.speech === 'cloud'
-          ? <p className="help">Giọng người thật của Groq, mỗi nhân vật một giọng. Hết lượt miễn phí thì tự chuyển sang giọng của máy.</p>
-          : <select id="voice" aria-label="Giọng của máy" value={cfg.voice} onChange={e => set({ voice: e.target.value })}>
-              {voices.map(v => <option key={v.name} value={v.name}>{v.name} ({v.lang})</option>)}
-            </select>}
 
         <label className="lbl" htmlFor="rate">Tốc độ nói <span>{cfg.rate.toFixed(2)}×</span></label>
         <input id="rate" type="range" min="0.7" max="1.2" step="0.05" value={cfg.rate} onChange={e => set({ rate: Number(e.target.value) })} />
