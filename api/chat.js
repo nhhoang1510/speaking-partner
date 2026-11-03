@@ -6,8 +6,10 @@
 export const config = { runtime: 'edge' };
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
-const MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
-const MAX_MESSAGES = 80, MAX_CHARS = 4000, MAX_TOKENS = 600;
+const MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-20b';
+const MAX_MESSAGES = 80, MAX_CHARS = 4000, MAX_TOKENS = 1000;
+// gpt-oss models think before answering; keep that short so speech starts quickly
+const REASONING = /gpt-oss/.test(MODEL) ? { reasoning_effort: 'low', include_reasoning: false } : {};
 
 const json = (body, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -36,6 +38,7 @@ export default async function handler(req) {
       model: MODEL, messages: msgs, stream: !!stream && !schema,
       temperature: typeof options.temperature === 'number' ? options.temperature : 0.8,
       max_tokens: Math.min(Number(options.num_predict) || MAX_TOKENS, MAX_TOKENS),
+      ...REASONING,
       ...(schema ? { response_format: { type: 'json_object' } } : {}),
     }),
   });
