@@ -15,6 +15,14 @@ export const SCENES = [
     setting: 'The learner is browsing. Help them find a size and colour, the fitting room, discounts, and paying or returning an item.' },
   { id: 'free', voice: 'austin', hue: 95, title: 'Free talk', vi: 'Nói chuyện tự do, chủ đề bất kỳ', name: 'Alex', role: 'a relaxed, curious conversation partner',
     setting: 'An open conversation about anything the learner wants: daily life, plans, opinions, news, travel. Share your own opinions too.' },
+  { id: 'accounting', voice: 'diana', hue: 48, title: 'Accounting', vi: 'Kế toán: sổ sách, hoá đơn, báo cáo', name: 'Grace', role: 'a senior accountant at an international company',
+    setting: 'The learner is a new member of the accounts team, or a colleague asking for help. Talk about invoices, expenses, reconciliations, month-end closing, budgets and reports. Explain terms simply when needed.' },
+  { id: 'finance', voice: 'daniel', hue: 172, title: 'Finance', vi: 'Tài chính: đầu tư, tiết kiệm, kế hoạch', name: 'Mr. Lee', role: 'a financial adviser at an investment firm',
+    setting: 'The learner has a meeting about their money: saving goals, budgeting, investing, risk, interest rates and loans. Ask about their goals and explain options in plain English. Do not give real investment advice; keep it general and educational.' },
+  { id: 'tax', voice: 'troy', hue: 8, title: 'Tax office', vi: 'Thuế: khai thuế, hoàn thuế, giấy tờ', name: 'Officer Brown', role: 'a helpful officer at the tax office',
+    setting: 'The learner has come to the tax office with a question: filing a tax return, deductions, a refund, a late payment or registering a business. Ask what they need, which documents they have, and explain the next steps in general terms.' },
+  { id: 'bank', voice: 'autumn', hue: 232, title: 'At the bank', vi: 'Ngân hàng: mở tài khoản, chuyển tiền', name: 'Olivia', role: 'a bank teller at a branch in Toronto',
+    setting: 'The learner is a customer at the counter. Help them open an account, deposit or withdraw cash, make a transfer, order a card or ask about fees and exchange rates.' },
 ];
 
 export const LEVELS = {

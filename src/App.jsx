@@ -4,6 +4,8 @@ import { Engine, canListen } from './lib/engine.js';
 import { checkAI } from './lib/llm.js';
 import { SCENES, LEVELS } from './scenes.js';
 import { Room, COLORS, loadMe, saveMe } from './lib/room.js';
+import { loadHistory, saveSession, deleteSession, snapshot, memoryFor } from './lib/history.js';
+import { Listener, voiceFor } from './lib/listen.js';
 
 // the whole app is the 3D school; panels float around it
 const School = lazy(() => import('./School.jsx'));
@@ -75,6 +77,18 @@ export default function App() {
   const [online, setOnline] = useState({ ok: null, users: [] });
   const [feed, setFeed] = useState([]);
   const prevUsers = useRef(null);
+  const [right, setRight] = useState('feed');         // right panel when not in a conversation: 'feed' | 'history' | a past session
+  const [history, setHistory] = useState(loadHistory);
+  const [walk, setWalk] = useState(false);             // "hoá thân": I walk my own character around
+  const [walkRoom, setWalkRoom] = useState(null);      // the room I'm standing in while walking
+  const stick = useRef({});                            // the on-screen joystick, read by the 3D scene
+  const pos = useRef({ x: 0, z: 0 });
+  const listenerRef = useRef(null);
+  if (!listenerRef.current) listenerRef.current = new Listener();
+  const listener = listenerRef.current;
+  const [listening, setListening] = useState(() => new Set());   // classmates I chose to listen to
+  const listenRef = useRef(listening); listenRef.current = listening;
+  const hereRef = useRef(null);                        // the room I'm standing in without talking: hear everyone there
 
   const set = patch => setCfg(c => ({ ...c, ...patch }));
   useEffect(() => {
@@ -122,19 +136,47 @@ export default function App() {
     if (prevUsers.current) {
       const ev = events(prevUsers.current, users, me && me.id);
       if (ev.length) setFeed(f => [...ev.reverse(), ...f].slice(0, 40));
+      // listening in: read out new lines from the classmates I follow, or from everyone in the room I'm standing in
+      for (const u of users) {
+        const p = prevUsers.current.get(u.id);
+        if (!p || (me && u.id === me.id)) continue;
+        if (!listenRef.current.has(u.id) && !(hereRef.current && u.scene === hereRef.current)) continue;
+        if (p.phase === 'listening' && u.phase !== 'listening' && u.said) listener.say(u.said, voiceFor(u.id));
+        if (u.ai && u.aiAt && u.aiAt !== p.aiAt) listener.say(u.ai, (SCENE[u.scene] && SCENE[u.scene].voice) || 'hannah');
+      }
     }
     prevUsers.current = new Map(users.map(u => [u.id, u]));
     setOnline({ ok, users });
   }, true), [me && me.id]);
-  const saidRef = useRef({ text: '', at: 0 });
+  const saidRef = useRef({ text: '', at: 0 }), aiRef = useRef({ text: '', at: 0 });
   const status = useMemo(() => {
     const mine = [...s.msgs].reverse().find(m => m.who === 'me');
     const text = mine ? mine.text.replace(/^…$/, '') : '';
     if (text !== saidRef.current.text) saidRef.current = { text, at: Date.now() };
-    return { scene: s.scene ? s.scene.id : null, phase: s.summary ? 'summary' : s.phase,
-             said: s.scene ? saidRef.current.text : '', saidAt: saidRef.current.at, turns: eng.turns.length };
-  }, [s]);
+    const reply = [...s.msgs].reverse().find(m => m.who === 'ai' && m.done);
+    const aiText = reply ? reply.text : '';
+    if (aiText !== aiRef.current.text) aiRef.current = { text: aiText, at: aiText ? Date.now() : 0 };
+    return { scene: s.scene ? s.scene.id : walk ? walkRoom : null, phase: s.summary ? 'summary' : s.phase,
+             said: s.scene ? saidRef.current.text : '', saidAt: saidRef.current.at,
+             ai: s.scene ? aiRef.current.text : '', aiAt: aiRef.current.at, turns: eng.turns.length,
+             free: walk, x: pos.current.x, z: pos.current.z };
+  }, [s, walk, walkRoom]);
+  const statusRef = useRef(status); statusRef.current = status;
   useEffect(() => room.update(status), [status]);
+  useEffect(() => { hereRef.current = walk && !s.scene ? walkRoom : null; }, [walk, walkRoom, s.scene]);
+  useEffect(() => listener.mute(s.phase === 'listening'), [s.phase]);
+
+  // keep every session in the history as it goes, so nothing is lost if the page closes
+  const session = useRef(null);
+  const finished = s.msgs.filter(m => m.who === 'me' ? !m.interim : m.done).length;
+  useEffect(() => {
+    if (!s.scene) { session.current = null; return; }
+    if (!session.current || session.current.scene !== s.scene.id || finished < session.current.n)
+      session.current = { id: Date.now().toString(36), scene: s.scene.id, start: Date.now(), n: 0 };
+    session.current.n = finished;
+    if (!s.msgs.some(m => m.who === 'me' && !m.interim)) return;      // nothing said yet: not worth keeping
+    setHistory(saveSession(snapshot(session.current.id, s, cfg.level, session.current.start)));
+  }, [s.scene, finished, s.summary && s.summary.loading]);
 
   // everyone in the school, with my own figure following my state right away
   const meLocal = me || { id: 'me-local', name: 'Bạn', color: '#5b8def' };
@@ -143,35 +185,52 @@ export default function App() {
     { ...meLocal, ...status, ts: Date.now() },
   ], [online.users, meLocal.id, meLocal.name, meLocal.color, status]);
 
-  const pick = sc => { setSheet(null); if (!s.scene || s.scene.id !== sc.id) eng.start(sc); };
+  const start = sc => { listener.stop(); eng.start(sc, memoryFor(sc.id, history)); };
+  const pick = sc => { setSheet(null); setWalk(false); if (!s.scene || s.scene.id !== sc.id) start(sc); };
   const leave = () => { eng.leave(); setView(v => ({ ...v, n: v.n + 1 })); };
+  const toggleWalk = () => { listener.unlock(); setWalk(w => !w); setWalkRoom(null); setSheet(null); };
+  const toggleListen = id => {
+    listener.unlock();
+    setListening(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  };
+  // walking: stepping out of the room ends the conversation there
+  const onRoom = id => { setWalkRoom(id); if (eng.s.scene && eng.s.scene.id !== id) eng.leave(); };
+  const onMove = (x, z) => { pos.current = { x, z }; room.update({ ...statusRef.current, x, z }); };
   const hue = s.scene ? s.scene.hue : 150;
 
   return (
     <MotionConfig reducedMotion="user">
       <div className="world" aria-label="Sơ đồ trường học">
         <Suspense fallback={null}>
-          <School users={users} meId={meLocal.id} focus={s.scene ? s.scene.id : null} fit={view.fit} nonce={view.n} onPick={pick} />
+          <School users={users} meId={meLocal.id} focus={s.scene ? s.scene.id : null} fit={view.fit} nonce={view.n} onPick={pick}
+            walk={walk} input={stick.current} onMove={onMove} onRoom={onRoom} />
         </Suspense>
       </div>
       <AnimatePresence>{booting && <Preloader key="pre" />}</AnimatePresence>
 
-      <div className={'hud' + (s.scene ? ' in-room' : '')} data-sheet={sheet || ''} style={{ '--h': hue }}>
+      <div className={'hud' + (s.scene ? ' in-room' : '') + (walk ? ' walking' : '')} data-sheet={sheet || ''} style={{ '--h': hue }}>
         <TopBar s={s} cfg={cfg} set={set} n={users.length} onSettings={() => setPanel(true)} onLeave={leave} onEnd={() => eng.end()} />
 
         <aside className="panel left" aria-label="Phòng học và mọi người">
           <Rooms users={users} current={s.scene} onPick={pick} />
-          <People users={users} meId={meLocal.id} ok={online.ok} />
+          <People users={users} meId={meLocal.id} ok={online.ok} listening={listening} onListen={toggleListen} />
         </aside>
 
         <aside className="panel right" aria-label={s.scene ? 'Hội thoại' : 'Hoạt động'}>
-          {s.scene ? <Talk s={s} eng={eng} cfg={cfg} /> : <Feed feed={feed} ai={ai} />}
+          {s.scene ? <Talk s={s} eng={eng} cfg={cfg} />
+            : right === 'feed' ? <Feed feed={feed} ai={ai} tabs={<RightTabs right={right} setRight={setRight} />} />
+            : right === 'history' ? <History history={history} tabs={<RightTabs right={right} setRight={setRight} />} onOpen={setRight}
+                onDelete={id => setHistory(deleteSession(id))} />
+            : <Session x={right} onBack={() => setRight('history')} onAgain={() => pick(SCENE[right.scene])} />}
         </aside>
 
         <div className="bottom">
+          {walk && <Stick input={stick.current} />}
           {s.scene
             ? <Dock s={s} eng={eng} />
-            : <ViewBar view={view} setView={setView} sheet={sheet} setSheet={setSheet} />}
+            : walk
+              ? <WalkBar here={walkRoom && SCENE[walkRoom]} onTalk={() => start(SCENE[walkRoom])} onExit={toggleWalk} />
+              : <ViewBar view={view} setView={setView} sheet={sheet} setSheet={k => { setSheet(k); if (k === 'feed' || k === 'history') setRight(k); }} onWalk={toggleWalk} />}
         </div>
       </div>
 
@@ -204,7 +263,7 @@ function TopBar({ s, cfg, set, n, onSettings, onLeave, onEnd }) {
     <header className="topbar glass">
       <div className="brand">
         <span className="logo">S</span>
-        <span className="brand-name">Speaking School</span>
+        <span className="brand-name">THPT Nguyễn Thái Học</span>
         <span className="online"><i />{n}<span className="wide"> online</span></span>
       </div>
       {s.scene
@@ -248,7 +307,7 @@ function Rooms({ users, current, onPick }) {
   );
 }
 
-function People({ users, meId, ok }) {
+function People({ users, meId, ok, listening, onListen }) {
   return (
     <section className="glass sec people">
       <h2>Trong trường <span>{users.length}</span></h2>
@@ -262,6 +321,13 @@ function People({ users, meId, ok }) {
               <span>{describe(u)}</span>
               {u.said && Date.now() - (u.saidAt || 0) < 60000 && <q>{u.said}</q>}
             </div>
+            {u.id !== meId && (
+              <button className={'ear' + (listening.has(u.id) ? ' on' : '')} onClick={() => onListen(u.id)}
+                aria-pressed={listening.has(u.id)} title={listening.has(u.id) ? 'Đang nghe — bấm để thôi' : 'Nghe người này nói'}>
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 3a7 7 0 0 0-7 7v6a3 3 0 0 0 3 3h1v-7H7v-2a5 5 0 0 1 10 0v2h-2v7h1a3 3 0 0 0 3-3v-6a7 7 0 0 0-7-7z" /></svg>
+                <span>{listening.has(u.id) ? 'Đang nghe' : 'Nghe'}</span>
+              </button>
+            )}
           </li>
         ))}
       </ul>
@@ -269,10 +335,20 @@ function People({ users, meId, ok }) {
   );
 }
 
-function Feed({ feed, ai }) {
+function RightTabs({ right, setRight }) {
+  return (
+    <div className="tabs" role="tablist">
+      {[['feed', 'Hoạt động'], ['history', 'Lịch sử']].map(([k, label]) => (
+        <button key={k} role="tab" aria-selected={right === k} className={right === k ? 'on' : ''} onClick={() => setRight(k)}>{label}</button>
+      ))}
+    </div>
+  );
+}
+
+function Feed({ feed, ai, tabs }) {
   return (
     <section className="glass sec feed">
-      <h2>Hoạt động</h2>
+      {tabs}
       {(ai.state === 'down' || ai.state === 'nomodel') && (
         <p className="notice">{LOCAL ? <>AI chưa chạy trên máy này — chạy <code>./start.sh</code> rồi tải lại trang.</> : 'Chưa kết nối được tới AI. Kiểm tra mạng rồi tải lại trang.'}</p>
       )}
@@ -294,7 +370,94 @@ function Feed({ feed, ai }) {
   );
 }
 
-function ViewBar({ view, setView, sheet, setSheet }) {
+function History({ history, tabs, onOpen, onDelete }) {
+  return (
+    <section className="glass sec history">
+      {tabs}
+      <p className="muted small">Các buổi luyện được lưu trên máy này. Nhân vật trong phòng sẽ nhớ lần trước bạn nói gì.</p>
+      <ul>
+        {history.map(x => {
+          const sc = SCENE[x.scene], said = x.msgs.filter(m => m.who === 'me').length, fixes = x.msgs.filter(m => m.fix).length;
+          return (
+            <li key={x.id}>
+              <button className="h-item" style={{ '--h': sc ? sc.hue : 150 }} onClick={() => onOpen(x)}>
+                <span className="avatar">{sc ? sc.name.replace('Mr. ', '').replace('Dr. ', '')[0] : '?'}</span>
+                <span className="r-t"><b>{sc ? sc.title : x.scene}</b>
+                  <small>{new Date(x.start).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} · {said} câu{fixes ? ` · ${fixes} sửa` : ''}</small></span>
+              </button>
+              <button className="h-del" onClick={() => onDelete(x.id)} aria-label="Xoá buổi này" title="Xoá buổi này">✕</button>
+            </li>
+          );
+        })}
+        {!history.length && <li className="muted small">Chưa có buổi luyện nào. Vào một phòng và nói vài câu nhé.</li>}
+      </ul>
+    </section>
+  );
+}
+
+function Session({ x, onBack, onAgain }) {
+  const sc = SCENE[x.scene] || { title: x.scene, name: 'AI', hue: 150 };
+  return (
+    <section className="glass sec talk session" style={{ '--h': sc.hue }}>
+      <div className="persona">
+        <button className="iconbtn" onClick={onBack} aria-label="Quay lại lịch sử">←</button>
+        <div>
+          <div className="persona-name">{sc.title}</div>
+          <div className="persona-role">{new Date(x.start).toLocaleString('vi-VN')} · với {sc.name}</div>
+        </div>
+      </div>
+      <div className="chat">
+        {x.msgs.map((m, i) => (
+          <div key={i} className={'msg ' + m.who}>
+            <div className="bubble">{m.text}</div>
+            {m.fix && <div className="fix"><span className="fix-l">Nói tự nhiên hơn</span><div className="fix-b">{m.fix.better}</div>{m.fix.note && <div className="fix-n">{m.fix.note}</div>}</div>}
+          </div>
+        ))}
+        {x.summary && (
+          <div className="summary">
+            {x.summary.tips.length > 0 && <><h4>Lời khuyên</h4><ul>{x.summary.tips.map((t, i) => <li key={i}>{t}</li>)}</ul></>}
+            {x.summary.phrases.length > 0 && <><h4>Cụm từ nên dùng</h4><ul>{x.summary.phrases.map((t, i) => <li key={i}>{t}</li>)}</ul></>}
+          </div>
+        )}
+      </div>
+      <button className="primary again" onClick={onAgain}>Luyện lại phòng này</button>
+    </section>
+  );
+}
+
+function WalkBar({ here, onTalk, onExit }) {
+  return (
+    <div className="viewbar walkbar glass">
+      {here
+        ? <button className="talk-btn" style={{ '--h': here.hue }} onClick={onTalk}>Nói chuyện với {here.name}</button>
+        : <span className="hint-walk"><span className="kbd-only"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> để đi, kéo chuột để nhìn · </span>đi vào một phòng để học</span>}
+      <button onClick={onExit}>Thoát hoá thân</button>
+    </div>
+  );
+}
+
+// on-screen joystick for touch screens
+function Stick({ input }) {
+  const [k, setK] = useState({ x: 0, y: 0 });
+  const R = 46;
+  const move = e => {
+    const r = e.currentTarget.getBoundingClientRect();
+    let x = e.clientX - (r.left + r.width / 2), y = e.clientY - (r.top + r.height / 2);
+    const d = Math.hypot(x, y); if (d > R) { x *= R / d; y *= R / d; }
+    input.jx = x / R; input.jy = -y / R; setK({ x, y });
+  };
+  const end = () => { input.jx = 0; input.jy = 0; setK({ x: 0, y: 0 }); };
+  useEffect(() => end, []);
+  return (
+    <div className="stick" onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); move(e); }}
+      onPointerMove={e => { if (e.buttons || e.pointerType === 'touch') move(e); }} onPointerUp={end} onPointerCancel={end}
+      role="application" aria-label="Cần điều khiển: kéo để đi">
+      <span style={{ transform: `translate(${k.x}px, ${k.y}px)` }} />
+    </div>
+  );
+}
+
+function ViewBar({ view, setView, sheet, setSheet, onWalk }) {
   const zoom = k => setView(v => ({ fit: Math.min(2.5, Math.max(0.6, v.fit * k)), n: v.n + 1 }));
   const tab = k => setSheet(sheet === k ? null : k);
   return (
@@ -305,7 +468,9 @@ function ViewBar({ view, setView, sheet, setSheet }) {
       <span className="sep" />
       <button className={'mob' + (sheet === 'rooms' ? ' on' : '')} onClick={() => tab('rooms')}>Phòng</button>
       <button className={'mob' + (sheet === 'feed' ? ' on' : '')} onClick={() => tab('feed')}>Hoạt động</button>
-      <span className="hint-pick">Bấm vào một phòng để vào học</span>
+      <button className={'mob' + (sheet === 'history' ? ' on' : '')} onClick={() => tab('history')}>Lịch sử</button>
+      <button className="walk-btn" onClick={onWalk}>Hoá thân</button>
+      <span className="hint-pick">hoặc bấm vào một phòng để vào học</span>
     </div>
   );
 }
