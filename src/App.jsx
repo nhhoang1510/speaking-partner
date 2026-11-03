@@ -226,6 +226,7 @@ export default function App() {
 
         <div className="bottom">
           {walk && <Stick input={stick.current} />}
+          {walk && <div className="look-tip touch-only">Kéo nút tròn để đi · vuốt màn hình để nhìn quanh</div>}
           {s.scene
             ? <Dock s={s} eng={eng} />
             : walk
@@ -452,6 +453,7 @@ function Stick({ input }) {
     <div className="stick" onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); move(e); }}
       onPointerMove={e => { if (e.buttons || e.pointerType === 'touch') move(e); }} onPointerUp={end} onPointerCancel={end}
       role="application" aria-label="Cần điều khiển: kéo để đi">
+      <em>Kéo để đi</em>
       <span style={{ transform: `translate(${k.x}px, ${k.y}px)` }} />
     </div>
   );

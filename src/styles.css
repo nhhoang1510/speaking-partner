@@ -422,3 +422,13 @@ html, body, #root { height: 100%; overflow: hidden; }
   .hud.in-room.walking .stick, .hud.walking .stick { bottom: calc(70px + env(safe-area-inset-bottom, 0px)); width: 96px; height: 96px; }
   .rooms ul { grid-template-columns: 1fr 1fr 1fr; }
 }
+
+/* first person on a touch screen: say how to move, then get out of the way */
+.touch-only { display: none; }
+@media (hover: none) { .touch-only { display: block; } }
+.stick em { position: absolute; bottom: -22px; left: 50%; transform: translateX(-50%); white-space: nowrap; font: 600 11px var(--sans);
+            font-style: normal; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.5); pointer-events: none; }
+.look-tip { position: fixed; left: 50%; top: 42%; transform: translate(-50%, -50%); z-index: 3; pointer-events: none; text-align: center;
+            padding: 10px 16px; border-radius: 14px; background: rgba(20,24,20,.6); color: #fff; font: 600 14px var(--sans);
+            animation: look-tip 6s ease forwards; max-width: 80vw; }
+@keyframes look-tip { 0%, 75% { opacity: 1; } 100% { opacity: 0; visibility: hidden; } }
