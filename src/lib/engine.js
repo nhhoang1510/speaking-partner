@@ -11,14 +11,23 @@ const MOBILE = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.t
 // one silent sample: playing it inside the tap unlocks the audio element for later replies (iOS)
 const SILENT_WAV = 'data:audio/wav;base64,UklGRiYAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQIAAAAAAA==';
 
-// long sentences are cut at commas/spaces: the cloud voice takes at most 200 characters at a time
+// the cloud voice takes at most 200 characters at a time: as few pieces as possible, cut between sentences
+// (each piece is read on its own, so every cut is an audible break)
 function chunks(t, max = 190) {
   const out = [];
-  while (t.length > max) {
-    let i = t.lastIndexOf(', ', max); if (i < 40) i = t.lastIndexOf(' ', max); if (i < 1) i = max;
-    out.push(t.slice(0, i + 1).trim()); t = t.slice(i + 1).trim();
+  let cur = '';
+  for (let sen of t.match(/[^.!?…]+[.!?…]+["'”)]?\s*|.+$/g) || [t]) {
+    sen = sen.trim();
+    while (sen.length > max) {                        // a very long sentence: cut at a comma or space
+      let i = sen.lastIndexOf(', ', max); if (i < 40) i = sen.lastIndexOf(' ', max); if (i < 1) i = max;
+      if (cur) { out.push(cur); cur = ''; }
+      out.push(sen.slice(0, i + 1).trim()); sen = sen.slice(i + 1).trim();
+    }
+    if (!sen) continue;
+    if (cur && (cur + ' ' + sen).length > max) { out.push(cur); cur = ''; }
+    cur = cur ? cur + ' ' + sen : sen;
   }
-  if (t) out.push(t);
+  if (cur) out.push(cur);
   return out;
 }
 
@@ -83,7 +92,8 @@ export class Engine {
       for await (const piece of chatStream({ ...this.llm(), messages: this.history, signal: this.abort.signal,
                                              options: { temperature: 0.8, num_predict: 160, num_ctx: 4096 } })) {
         full += piece; buf += piece; this.upd(m, { text: cleanSpoken(full) });
-        let mm;                                           // speak each finished sentence while the rest is generated
+        if (this.cloudVoice()) continue;                  // the cloud voice reads the whole reply at once: smoother
+        let mm;                                           // device voice: speak each finished sentence while the rest is generated
         while ((mm = buf.match(/^([\s\S]*?[.!?…]+["'”)]?)\s+/))) { this.say(mm[1]); buf = buf.slice(mm[0].length); }
       }
       if (buf.trim()) this.say(buf);
@@ -114,9 +124,11 @@ export class Engine {
   say(text, rate) {
     text = cleanSpoken(text); if (!text) return;
     if (this.s.phase === 'thinking') this.set({ phase: 'speaking' });
-    if (!this.ttsOff && this.audio) { chunks(text).forEach(c => this.sayCloud(c, rate)); return; }
+    if (this.cloudVoice()) { chunks(text).forEach(c => this.sayCloud(c, rate)); return; }
     this.sayDevice(text, rate);
   }
+
+  cloudVoice() { return !this.ttsOff && !!this.audio; }
 
   sayCloud(text, rate) {
     if (!this.ttsAbort) this.ttsAbort = new AbortController();
