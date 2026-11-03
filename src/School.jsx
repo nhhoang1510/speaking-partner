@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { SCENES } from './scenes.js';
 import { B, C, S, floorTexture, Furniture, RoomFloor, Window, CorridorDecor, hsl } from './world/props.jsx';
 import { Person } from './world/people.jsx';
+import { Bake } from './world/bake.jsx';
 import { Campus, Shell, blockedOutside, COLS, X0, BX, BZ, CX, LEN, FENCE, GATE } from './world/campus.jsx';
 
 const MOBILE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -76,7 +77,7 @@ function Npc({ room, busy }) {
     if (g.current) g.current.rotation.y = Math.sin(clock.elapsedTime * 0.4 + room.i) * 0.15;
   });
   return (
-    <group ref={g} position={[0, 0, -2.3]}>
+    <group ref={g} position={[0, 0, -2.3]} userData={{ live: true }}>
       <Person shirt={hsl(room.scene.hue, 45, 55)} seed={room.scene.id + room.scene.name} outfit={OUTFITS[room.scene.id]} act={act} />
     </group>
   );
@@ -159,7 +160,7 @@ function Learner({ u, target, me, now, pilot, viewer }) {
 }
 
 // first person: I move where I look (pilot.yaw); W/S or the stick to walk, A/D to step sideways,
-// left/right arrows to turn; walls stop me, and I slide along them
+// left/right arrows or the stick pushed sideways to turn; walls stop me, and I slide along them
 const step = new THREE.Vector3();
 function drive(pilot, p, g, t, dt) {
   const k = pilot.input;
@@ -168,10 +169,13 @@ function drive(pilot, p, g, t, dt) {
     pilot.fresh = false;
     if (!canStand(p.x, p.z)) { p.x = Math.max(-12, Math.min(12, p.x)); p.z = 0; }
     const r = roomAt(p.x, p.z);
-    pilot.yaw = r ? (r.pos.z < 0 ? Math.PI : 0) : (p.x > 0 ? Math.PI / 2 : -Math.PI / 2);
+    pilot.yaw = pilot.wantYaw = r ? (r.pos.z < 0 ? Math.PI : 0) : (p.x > 0 ? Math.PI / 2 : -Math.PI / 2);
+    pilot.wantPitch = pilot.pitch;
   }
-  pilot.yaw -= (k.turn || 0) * 2.2 * dt;
-  const ix = (k.kx || 0) + (k.jx || 0), iy = (k.ky || 0) + (k.jy || 0);
+  // arrows turn; the on-screen stick turns too when pushed sideways (eased in, so a small push turns slowly)
+  const jx = k.jx || 0;
+  pilot.wantYaw -= ((k.turn || 0) * 2.2 + Math.sign(jx) * jx * jx * 2.4) * dt;
+  const ix = k.kx || 0, iy = (k.ky || 0) + (k.jy || 0);
   const sin = Math.sin(pilot.yaw), cos = Math.cos(pilot.yaw);
   step.set(-sin * iy + cos * ix, 0, -cos * iy - sin * ix);
   const len = Math.min(1, step.length());
@@ -197,19 +201,27 @@ function FirstPerson({ pilot }) {
   useEffect(() => {
     const el = gl.domElement;
     let drag = null;
-    const down = e => { drag = { id: e.pointerId, x: e.clientX, y: e.clientY }; };
+    // dragging sets where to look; the camera eases there every frame, so uneven touch events still turn smoothly
+    const down = e => { if (!drag) drag = { id: e.pointerId, x: e.clientX, y: e.clientY }; };
     const move = e => {
       if (!drag || e.pointerId !== drag.id) return;
-      pilot.yaw -= (e.clientX - drag.x) * 0.006;
-      pilot.pitch = Math.max(-0.9, Math.min(0.7, pilot.pitch - (e.clientY - drag.y) * 0.005));
+      const k = e.pointerType === 'mouse' ? 0.006 : Math.min(0.012, 3.4 / innerWidth);   // a full swipe turns about half way round
+      if (pilot.wantYaw == null) { pilot.wantYaw = pilot.yaw; pilot.wantPitch = pilot.pitch; }
+      pilot.wantYaw -= (e.clientX - drag.x) * k;
+      pilot.wantPitch = Math.max(-0.9, Math.min(0.7, pilot.wantPitch - (e.clientY - drag.y) * k * 0.8));
       drag.x = e.clientX; drag.y = e.clientY;
     };
     const up = e => { if (drag && e.pointerId === drag.id) drag = null; };
     el.addEventListener('pointerdown', down); addEventListener('pointermove', move); addEventListener('pointerup', up); addEventListener('pointercancel', up);
     return () => { el.removeEventListener('pointerdown', down); removeEventListener('pointermove', move); removeEventListener('pointerup', up); removeEventListener('pointercancel', up); };
   }, [gl]);
-  useFrame(() => {
+  useFrame((_, dt) => {
     if (!cam.current) return;
+    if (pilot.wantYaw != null) {
+      const k = 1 - Math.exp(-Math.min(dt, 0.1) * 16);
+      pilot.yaw += (pilot.wantYaw - pilot.yaw) * k;
+      pilot.pitch += (pilot.wantPitch - pilot.pitch) * k;
+    }
     cam.current.position.set(pilot.pos.x, 1.5 + (pilot.bob || 0), pilot.pos.z);
     cam.current.rotation.set(pilot.pitch, pilot.yaw, 0, 'YXZ');
   });
@@ -410,7 +422,7 @@ export default function School({ users, meId, focus, fit = 1, nonce = 0, onPick,
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
   const pilot = useMemo(() => ({ pos: new THREE.Vector3(), room: undefined, input: {}, yaw: Math.PI / 2, pitch: -0.05 }), []);
   Object.assign(pilot, { on: walk, input: input || pilot.input, onMove, onRoom });
-  useEffect(() => { pilot.room = undefined; pilot.sent = 0; pilot.fresh = true; pilot.pitch = -0.05; }, [walk]);
+  useEffect(() => { pilot.room = undefined; pilot.sent = 0; pilot.fresh = true; pilot.pitch = pilot.wantPitch = -0.05; pilot.wantYaw = null; }, [walk]);
 
   useEffect(() => {
     if (!walk) return;
@@ -440,8 +452,8 @@ export default function School({ users, meId, focus, fit = 1, nonce = 0, onPick,
   const mine = users.find(u => u.id === meId);
 
   return (
-    <Canvas orthographic shadows={!MOBILE} dpr={[1, MOBILE ? 1.5 : 2]} camera={{ position: [CX + 28, 26, 24], zoom: 30, near: -200, far: 400 }}
-      onPointerMissed={() => { document.body.style.cursor = ''; }}>
+    <Canvas orthographic shadows={!MOBILE} dpr={MOBILE ? (walk ? 1 : [1, 1.5]) : [1, 2]} camera={{ position: [CX + 28, 26, 24], zoom: 30, near: -200, far: 400 }}
+      onCreated={st => { if (import.meta.env.DEV) window.__r3f = st; }} onPointerMissed={() => { document.body.style.cursor = ''; }}>
       <color attach="background" args={[walk ? '#cfe6f5' : '#dfe9d3']} />
       {walk && <Sky distance={4000} sunPosition={[60, 40, 30]} turbidity={4} rayleigh={1.2} mieCoefficient={0.004} />}
       {walk && <fog attach="fog" args={['#dbe9f2', 45, 150]} />}
@@ -449,6 +461,7 @@ export default function School({ users, meId, focus, fit = 1, nonce = 0, onPick,
       {walk && <ambientLight intensity={0.55} color="#fff4e6" />}
       <directionalLight position={[24, 40, 16]} intensity={1.5} castShadow={!MOBILE} shadow-mapSize={[4096, 4096]}
         shadow-camera-left={-45} shadow-camera-right={50} shadow-camera-top={34} shadow-camera-bottom={-34} shadow-camera-far={120} shadow-bias={-0.0005} />
+      <Bake key={walk ? 'walk' : 'view'}>
       <Grounds walk={walk} />
       <Walls full={walk} />
       <Shell full={walk} tall={TALL} low={LOW} />
@@ -469,6 +482,7 @@ export default function School({ users, meId, focus, fit = 1, nonce = 0, onPick,
         <Room key={r.scene.id} room={r} count={count[r.scene.id]} busy={busy[r.scene.id]}
               mine={mine && mine.scene === r.scene.id} onPick={onPick} viewer={pilot} full={walk} />
       ))}
+      </Bake>
       {users.map(u => <Learner key={u.id} u={u} target={targets[u.id]} me={u.id === meId} now={now} pilot={u.id === meId ? pilot : null} viewer={pilot} />)}
       {walk
         ? <FirstPerson pilot={pilot} />
