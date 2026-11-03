@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, MotionConfig, useMotionValue, useSpring } from 'framer-motion';
 import { Engine, canListen } from './lib/engine.js';
-import { listModels } from './lib/llm.js';
+import { checkAI } from './lib/llm.js';
 import { SCENES, LEVELS } from './scenes.js';
 
-const DEFAULTS = { url: 'http://localhost:11434', model: 'llama3.2:3b', level: 'intermediate', voice: '', rate: 1, pause: 1.4, showAi: true, feedback: true };
+const LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname);
+const DEFAULTS = { provider: LOCAL ? 'ollama' : 'cloud', url: 'http://localhost:11434', model: 'llama3.2:3b', level: 'intermediate', voice: '', rate: 1, pause: 1.4, showAi: true, feedback: true };
 const spring = { type: 'spring', stiffness: 260, damping: 26 };
 
 function loadSettings() {
@@ -48,11 +49,11 @@ export default function App() {
   useEffect(() => {
     let live = true;
     setAi({ state: 'checking' });
-    const t = setTimeout(() => listModels(cfg.url)
-      .then(ms => live && setAi({ state: ms.some(m => m === cfg.model || m === cfg.model + ':latest') ? 'ok' : 'nomodel', models: ms }))
+    const t = setTimeout(() => checkAI(cfg)
+      .then(r => live && setAi({ state: r.ok ? 'ok' : 'nomodel', model: r.model, models: r.models }))
       .catch(() => live && setAi({ state: 'down' })), 300);
     return () => { live = false; clearTimeout(t); };
-  }, [cfg.url, cfg.model]);
+  }, [cfg.provider, cfg.url, cfg.model]);
 
   // entry sequence: wait for fonts and the AI check, at least a short beat
   useEffect(() => {
@@ -129,10 +130,10 @@ function TopBar({ s, ai, cfg, onSettings, onBack, onEnd }) {
         <span className="brand-name">Speaking Partner</span>
       </div>
       <div className="top-right">
-        <span className={'pill ' + ai.state} title={ai.state === 'ok' ? `${cfg.model} chạy trên máy của bạn` : ''}>
-          <i />{ai.state === 'ok' ? 'AI sẵn sàng' : ai.state === 'checking' ? 'Đang kết nối…' : ai.state === 'nomodel' ? 'Thiếu model' : 'AI chưa bật'}
+        <span className={'pill ' + ai.state} title={ai.state === 'ok' ? `${ai.model || cfg.model} · ${cfg.provider === 'cloud' ? 'cloud' : 'trên máy'}` : ''}>
+          <i /><span className="pill-t">{ai.state === 'ok' ? 'AI sẵn sàng' : ai.state === 'checking' ? 'Đang kết nối…' : ai.state === 'nomodel' ? (cfg.provider === 'cloud' ? 'Chưa cấu hình AI' : 'Thiếu model') : 'AI chưa bật'}</span>
         </span>
-        {s.scene && <button className="ghost" onClick={onEnd}>Kết thúc &amp; nhận xét</button>}
+        {s.scene && <button className="ghost" onClick={onEnd}><span className="wide">Kết thúc &amp; nhận xét</span><span className="narrow">Kết thúc</span></button>}
         <button className="iconbtn" onClick={onSettings} aria-label="Cài đặt">
           <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3h-4l-.4 2.9a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.4 7.4 0 0 0 1.7 1L11 21h4l.4-2.9a7.4 7.4 0 0 0 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)" /></svg>
         </button>
@@ -164,13 +165,15 @@ function Home({ cfg, set, ready, onPick, ai, onSettings }) {
           {Object.entries(LEVELS).map(([k, v]) => (
             <button key={k} role="radio" aria-checked={cfg.level === k} className={'seg' + (cfg.level === k ? ' on' : '')} onClick={() => set({ level: k })}>
               {cfg.level === k && <motion.span layoutId="seg" className="seg-bg" transition={spring} />}
-              <span className="seg-t">{v.label}</span>
+              <span className="seg-t">{v.label.replace(/ \(.*\)/, '')}<span className="seg-lv"> {v.label.match(/\((.*)\)/)[1]}</span></span>
             </button>
           ))}
         </motion.div>
         {(ai.state === 'down' || ai.state === 'nomodel') && ready && (
           <motion.button className="notice" onClick={onSettings} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.9 }}>
-            AI chưa chạy trên máy này — chạy <code>./start.sh</code> rồi tải lại trang. Bấm để xem cài đặt.
+            {cfg.provider === 'cloud'
+              ? (ai.state === 'nomodel' ? 'AI cloud chưa được cấu hình (thiếu GROQ_API_KEY trên Vercel).' : 'Không kết nối được AI cloud.')
+              : <>AI chưa chạy trên máy này — chạy <code>./start.sh</code> rồi tải lại trang.</>} Bấm để xem cài đặt.
           </motion.button>
         )}
       </section>
@@ -218,7 +221,7 @@ function Talk({ s, eng, cfg }) {
         <div className="status" aria-live="polite">{s.status}</div>
         <MicOrb phase={s.phase} onClick={() => eng.mic()} />
         <TypeBox onSend={t => eng.typed(t)} />
-        <div className="hint">{canListen ? <>Phím <kbd>Space</kbd> — nói / dừng / ngắt lời AI</> : 'Trình duyệt này không nhận giọng nói — hãy mở bằng Chrome'}</div>
+        <div className="hint kbd-only">{canListen ? <>Phím <kbd>Space</kbd> — nói / dừng / ngắt lời AI</> : 'Trình duyệt này không nhận giọng nói — hãy mở bằng Chrome'}</div>
       </footer>
     </motion.main>
   );
@@ -334,7 +337,20 @@ function Settings({ cfg, set, voices, ai, onClose }) {
         <label className="switch"><input type="checkbox" checked={cfg.showAi} onChange={e => set({ showAi: e.target.checked })} /><span />Hiện chữ của AI <small>tắt để luyện nghe</small></label>
         <label className="switch"><input type="checkbox" checked={cfg.feedback} onChange={e => set({ feedback: e.target.checked })} /><span />Sửa câu của tôi</label>
 
-        <h3 className="drawer-sec">AI trên máy</h3>
+        <h3 className="drawer-sec">Nguồn AI</h3>
+        <div className="levels full" role="radiogroup" aria-label="Nguồn AI">
+          {[['cloud', 'Cloud (Groq)'], ['ollama', 'Ollama trên máy']].map(([k, label]) => (
+            <button key={k} role="radio" aria-checked={cfg.provider === k} className={'seg' + (cfg.provider === k ? ' on' : '')} onClick={() => set({ provider: k })}>
+              {cfg.provider === k && <motion.span layoutId="seg-ai" className="seg-bg" transition={spring} />}
+              <span className="seg-t">{label}</span>
+            </button>
+          ))}
+        </div>
+        {cfg.provider === 'cloud'
+          ? <p className="help">
+              {ai.state === 'ok' ? `Đã kết nối: ${ai.model}. Dùng được trên điện thoại.` : ai.state === 'nomodel' ? 'Server chưa có GROQ_API_KEY — thêm trong Vercel → Settings → Environment Variables rồi deploy lại.' : 'Chưa kết nối được /api/chat (chỉ có khi chạy trên Vercel).'}
+            </p>
+          : <>
         <label className="lbl" htmlFor="url">Địa chỉ Ollama</label>
         <input id="url" className="txt" value={cfg.url} onChange={e => set({ url: e.target.value.trim().replace(/\/$/, '') })} />
         <label className="lbl" htmlFor="model">Model</label>
@@ -347,6 +363,7 @@ function Settings({ cfg, set, voices, ai, onClose }) {
           {ai.state === 'ok' ? `Đã kết nối: ${cfg.model}.` : ai.state === 'nomodel' ? `Ollama chạy nhưng chưa có model ${cfg.model}.` : 'Chưa kết nối được Ollama.'}{' '}
           Chạy <code>./start.sh ai</code> trên máy để bật AI. Khi mở trang từ Vercel, Chrome sẽ hỏi quyền truy cập thiết bị trong mạng cục bộ — hãy bấm Cho phép.
         </p>
+          </>}
       </motion.aside>
     </>
   );
