@@ -5,6 +5,8 @@ import { systemPrompt, OPENER } from '../scenes.js';
 
 const SR = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
 export const canListen = !!SR;
+// phones: continuous recognition repeats words on Android, so one utterance per session there
+const MOBILE = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
 export function cleanSpoken(t) {
   return t.replace(/\*[^*]*\*/g, '').replace(/[#_`~>]/g, '')
@@ -41,11 +43,12 @@ export class Engine {
   add(m) { m.id = ++this.idc; this.s.msgs.push(m); this.emit(); return m; }
   upd(m, patch) { Object.assign(m, patch); this.emit(); }
   remove(m) { this.s.msgs = this.s.msgs.filter(x => x !== m); this.emit(); }
-  llm() { return { url: this.settings.url, model: this.settings.model }; }
+  llm() { return { provider: this.settings.provider, url: this.settings.url, model: this.settings.model }; }
 
   // ---------------- conversation ----------------
   start(scene) {
     this.stopAll();
+    speechSynthesis.speak(new SpeechSynthesisUtterance(' '));   // iOS: speech must be unlocked inside the tap
     this.history = [{ role: 'system', content: systemPrompt(scene, this.settings.level) }, { role: 'user', content: OPENER }];
     this.turns = []; this.fixes = []; this.lastAi = '';
     this.s.msgs = []; this.set({ scene, summary: null });
@@ -115,7 +118,7 @@ export class Engine {
     if (!SR) { this.status('Trình duyệt không nhận giọng nói được — hãy dùng Chrome, hoặc gõ câu trả lời'); return; }
     this.stopListening(true);
     const rec = new SR();
-    rec.lang = 'en-US'; rec.continuous = true; rec.interimResults = true;
+    rec.lang = 'en-US'; rec.continuous = !MOBILE; rec.interimResults = true;
     this.rec = rec; this.recText = ''; this.recWanted = true;
     rec.onresult = e => {
       let fin = '', interim = '';
@@ -134,7 +137,13 @@ export class Engine {
       else if (e.error === 'network') { this.recWanted = false; this.set({ phase: 'idle', status: 'Nhận giọng nói cần Internet (Chrome dùng máy chủ Google)' }); }
     };
     rec.onend = () => {                                  // Chrome stops by itself after a long silence: keep listening
-      if (this.rec === rec && this.recWanted && this.s.phase === 'listening') { try { rec.start(); } catch (e) { /* already started */ } }
+      if (this.rec !== rec || !this.recWanted || this.s.phase !== 'listening') return;
+      if (MOBILE) {                                      // no restart loop on phones (each start beeps)
+        clearTimeout(this.recTimer);
+        if (this.recText) this.finishListening(); else this.stopListening();
+        return;
+      }
+      try { rec.start(); } catch (e) { /* already started */ }
     };
     try { rec.start(); this.set({ phase: 'listening', status: 'Đang nghe… (ngừng nói một chút là tự gửi)' }); } catch (e) { /* already started */ }
   }
