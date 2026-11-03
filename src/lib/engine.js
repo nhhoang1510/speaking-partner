@@ -110,11 +110,11 @@ export class Engine {
   typed(text) { if (!this.s.scene || !text.trim()) return; this.stopAll(); this.learnerSaid(text.trim()); }
 
   // ---------------- speech out ----------------
-  // natural cloud voice (Groq Orpheus) when available, else the device's own voice
+  // always the natural cloud voice (Groq Orpheus); the device's own voice only if that fails
   say(text, rate) {
     text = cleanSpoken(text); if (!text) return;
     if (this.s.phase === 'thinking') this.set({ phase: 'speaking' });
-    if (this.settings.speech === 'cloud' && !this.ttsOff && this.audio) { chunks(text).forEach(c => this.sayCloud(c, rate)); return; }
+    if (!this.ttsOff && this.audio) { chunks(text).forEach(c => this.sayCloud(c, rate)); return; }
     this.sayDevice(text, rate);
   }
 
