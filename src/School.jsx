@@ -172,9 +172,10 @@ function drive(pilot, p, g, t, dt) {
     pilot.yaw = pilot.wantYaw = r ? (r.pos.z < 0 ? Math.PI : 0) : (p.x > 0 ? Math.PI / 2 : -Math.PI / 2);
     pilot.wantPitch = pilot.pitch;
   }
-  // arrows turn; the on-screen stick turns too when pushed sideways (eased in, so a small push turns slowly)
-  const jx = k.jx || 0;
-  pilot.wantYaw -= ((k.turn || 0) * 2.2 + Math.sign(jx) * jx * jx * 2.4) * dt;
+  // arrows turn; the on-screen stick turns too when pushed sideways: nothing near the middle (so walking straight
+  // doesn't drift), then gently, faster only near the edge
+  const jx = k.jx || 0, ax = Math.max(0, (Math.abs(jx) - 0.3) / 0.7);
+  pilot.wantYaw -= ((k.turn || 0) * 2.2 + Math.sign(jx) * ax * ax * 1.3) * dt;
   const ix = k.kx || 0, iy = (k.ky || 0) + (k.jy || 0);
   const sin = Math.sin(pilot.yaw), cos = Math.cos(pilot.yaw);
   step.set(-sin * iy + cos * ix, 0, -cos * iy - sin * ix);
@@ -205,7 +206,7 @@ function FirstPerson({ pilot }) {
     const down = e => { if (!drag) drag = { id: e.pointerId, x: e.clientX, y: e.clientY }; };
     const move = e => {
       if (!drag || e.pointerId !== drag.id) return;
-      const k = e.pointerType === 'mouse' ? 0.006 : Math.min(0.012, 3.4 / innerWidth);   // a full swipe turns about half way round
+      const k = e.pointerType === 'mouse' ? 0.006 : Math.min(0.007, 2 / innerWidth);   // a full swipe turns about a third of the way round
       if (pilot.wantYaw == null) { pilot.wantYaw = pilot.yaw; pilot.wantPitch = pilot.pitch; }
       pilot.wantYaw -= (e.clientX - drag.x) * k;
       pilot.wantPitch = Math.max(-0.9, Math.min(0.7, pilot.wantPitch - (e.clientY - drag.y) * k * 0.8));
@@ -218,7 +219,7 @@ function FirstPerson({ pilot }) {
   useFrame((_, dt) => {
     if (!cam.current) return;
     if (pilot.wantYaw != null) {
-      const k = 1 - Math.exp(-Math.min(dt, 0.1) * 16);
+      const k = 1 - Math.exp(-Math.min(dt, 0.1) * 10);
       pilot.yaw += (pilot.wantYaw - pilot.yaw) * k;
       pilot.pitch += (pilot.wantPitch - pilot.pitch) * k;
     }
