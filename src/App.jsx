@@ -5,11 +5,14 @@ import { checkAI } from './lib/llm.js';
 import { SCENES, LEVELS } from './scenes.js';
 
 const LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname);
-const DEFAULTS = { provider: LOCAL ? 'ollama' : 'cloud', url: 'http://localhost:11434', model: 'llama3.2:3b', level: 'intermediate', voice: '', rate: 1, pause: 1.4, showAi: true, feedback: true };
+// the AI is chosen by where the page runs, not by the user: the deployed site uses the cloud,
+// a local dev server uses Ollama on this computer
+const AI = LOCAL ? { provider: 'ollama', url: 'http://localhost:11434', model: 'llama3.2:3b' } : { provider: 'cloud' };
+const DEFAULTS = { level: 'intermediate', voice: '', rate: 1, pause: 1.4, showAi: true, feedback: true };
 const spring = { type: 'spring', stiffness: 260, damping: 26 };
 
 function loadSettings() {
-  try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem('sp-settings') || '{}') }; } catch (e) { return DEFAULTS; }
+  try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem('sp-settings') || '{}'), ...AI }; } catch (e) { return { ...DEFAULTS, ...AI }; }
 }
 
 function useVoices() {
@@ -81,16 +84,16 @@ export default function App() {
       <AnimatePresence>{booting && <Preloader key="pre" />}</AnimatePresence>
 
       <div className="shell">
-        <TopBar s={s} ai={ai} cfg={cfg} onSettings={() => setPanel(true)} onBack={() => eng.leave()} onEnd={() => eng.end()} />
+        <TopBar s={s} onSettings={() => setPanel(true)} onBack={() => eng.leave()} onEnd={() => eng.end()} />
         <AnimatePresence mode="wait">
           {!s.scene
-            ? <Home key="home" cfg={cfg} set={set} ready={!booting} onPick={sc => eng.start(sc)} ai={ai} onSettings={() => setPanel(true)} />
+            ? <Home key="home" cfg={cfg} set={set} ready={!booting} onPick={sc => eng.start(sc)} ai={ai} />
             : <Talk key={'talk-' + s.scene.id} s={s} eng={eng} cfg={cfg} />}
         </AnimatePresence>
       </div>
 
       <AnimatePresence>
-        {panel && <Settings key="set" cfg={cfg} set={set} ai={ai} onClose={() => setPanel(false)} />}
+        {panel && <Settings key="set" cfg={cfg} set={set} onClose={() => setPanel(false)} />}
       </AnimatePresence>
     </MotionConfig>
   );
@@ -118,7 +121,7 @@ function Preloader() {
   );
 }
 
-function TopBar({ s, ai, cfg, onSettings, onBack, onEnd }) {
+function TopBar({ s, onSettings, onBack, onEnd }) {
   return (
     <header className="topbar">
       <div className="brand">
@@ -132,9 +135,6 @@ function TopBar({ s, ai, cfg, onSettings, onBack, onEnd }) {
         <span className="brand-name">Speaking Partner</span>
       </div>
       <div className="top-right">
-        <span className={'pill ' + ai.state} title={ai.state === 'ok' ? `${ai.model || cfg.model} · ${cfg.provider === 'cloud' ? 'cloud' : 'trên máy'}` : ''}>
-          <i /><span className="pill-t">{ai.state === 'ok' ? 'AI sẵn sàng' : ai.state === 'checking' ? 'Đang kết nối…' : ai.state === 'nomodel' ? (cfg.provider === 'cloud' ? 'Chưa cấu hình AI' : 'Thiếu model') : 'AI chưa bật'}</span>
-        </span>
         {s.scene && <button className="ghost" onClick={onEnd}><span className="wide">Kết thúc &amp; nhận xét</span><span className="narrow">Kết thúc</span></button>}
         <button className="iconbtn" onClick={onSettings} aria-label="Cài đặt">
           <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3h-4l-.4 2.9a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.4 7.4 0 0 0 1.7 1L11 21h4l.4-2.9a7.4 7.4 0 0 0 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)" /></svg>
@@ -147,7 +147,7 @@ function TopBar({ s, ai, cfg, onSettings, onBack, onEnd }) {
 // ---------------------------------------------------------------- home
 const HEAD = ['Speak', 'English', 'like', "it's", 'real.'];
 
-function Home({ cfg, set, ready, onPick, ai, onSettings }) {
+function Home({ cfg, set, ready, onPick, ai }) {
   return (
     <motion.main className="home" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.35 }}>
       <section className="hero">
@@ -172,11 +172,10 @@ function Home({ cfg, set, ready, onPick, ai, onSettings }) {
           ))}
         </motion.div>
         {(ai.state === 'down' || ai.state === 'nomodel') && ready && (
-          <motion.button className="notice" onClick={onSettings} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.9 }}>
-            {cfg.provider === 'cloud'
-              ? (ai.state === 'nomodel' ? 'AI cloud chưa được cấu hình (thiếu GROQ_API_KEY trên Vercel).' : 'Không kết nối được AI cloud.')
-              : <>AI chưa chạy trên máy này — chạy <code>./start.sh</code> rồi tải lại trang.</>} Bấm để xem cài đặt.
-          </motion.button>
+          <motion.p className="notice" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.9 }}>
+            {LOCAL ? <>AI chưa chạy trên máy này — chạy <code>./start.sh</code> rồi tải lại trang.</>
+                   : 'Chưa kết nối được tới AI. Kiểm tra mạng rồi tải lại trang.'}
+          </motion.p>
         )}
       </section>
 
@@ -318,7 +317,7 @@ function TypeBox({ onSend }) {
 }
 
 // ---------------------------------------------------------------- settings drawer
-function Settings({ cfg, set, ai, onClose }) {
+function Settings({ cfg, set, onClose }) {
   return (
     <>
       <motion.div className="scrim" onClick={onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />
@@ -334,33 +333,6 @@ function Settings({ cfg, set, ai, onClose }) {
         <label className="switch"><input type="checkbox" checked={cfg.showAi} onChange={e => set({ showAi: e.target.checked })} /><span />Hiện chữ của AI <small>tắt để luyện nghe</small></label>
         <label className="switch"><input type="checkbox" checked={cfg.feedback} onChange={e => set({ feedback: e.target.checked })} /><span />Sửa câu của tôi</label>
 
-        <h3 className="drawer-sec">Nguồn AI</h3>
-        <div className="levels full" role="radiogroup" aria-label="Nguồn AI">
-          {[['cloud', 'Cloud (Groq)'], ['ollama', 'Ollama trên máy']].map(([k, label]) => (
-            <button key={k} role="radio" aria-checked={cfg.provider === k} className={'seg' + (cfg.provider === k ? ' on' : '')} onClick={() => set({ provider: k })}>
-              {cfg.provider === k && <motion.span layoutId="seg-ai" className="seg-bg" transition={spring} />}
-              <span className="seg-t">{label}</span>
-            </button>
-          ))}
-        </div>
-        {cfg.provider === 'cloud'
-          ? <p className="help">
-              {ai.state === 'ok' ? `Đã kết nối: ${ai.model}. Dùng được trên điện thoại.` : ai.state === 'nomodel' ? 'Server chưa có GROQ_API_KEY — thêm trong Vercel → Settings → Environment Variables rồi deploy lại.' : 'Chưa kết nối được /api/chat (chỉ có khi chạy trên Vercel).'}
-            </p>
-          : <>
-        <label className="lbl" htmlFor="url">Địa chỉ Ollama</label>
-        <input id="url" className="txt" value={cfg.url} onChange={e => set({ url: e.target.value.trim().replace(/\/$/, '') })} />
-        <label className="lbl" htmlFor="model">Model</label>
-        {ai.models && ai.models.length
-          ? <select id="model" value={cfg.model} onChange={e => set({ model: e.target.value })}>
-              {[...new Set([cfg.model, ...ai.models])].map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
-          : <input id="model" className="txt" value={cfg.model} onChange={e => set({ model: e.target.value.trim() })} />}
-        <p className="help">
-          {ai.state === 'ok' ? `Đã kết nối: ${cfg.model}.` : ai.state === 'nomodel' ? `Ollama chạy nhưng chưa có model ${cfg.model}.` : 'Chưa kết nối được Ollama.'}{' '}
-          Chạy <code>./start.sh ai</code> trên máy để bật AI. Khi mở trang từ Vercel, Chrome sẽ hỏi quyền truy cập thiết bị trong mạng cục bộ — hãy bấm Cho phép.
-        </p>
-          </>}
       </motion.aside>
     </>
   );
