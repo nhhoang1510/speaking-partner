@@ -237,7 +237,7 @@ function Flag({ x, z, c1, c2, h = 6, phase = 0 }) {
     g.fillStyle = c1; g.fillRect(0, 0, w, hh); g.fillStyle = c2; g.fillRect(0, hh / 3, w, hh / 3);
   }, [1, 1]), [c1, c2]);
   return (
-    <group position={[x, 0, z]}>
+    <group position={[x, 0, z]} userData={{ live: true }}>
       <C p={[0, h / 2, 0]} r={0.05} h={h} c="#d8dde2" metal={0.7} rough={0.3} seg={8} />
       <S p={[0, h + 0.05, 0]} r={0.08} c="#e5c46b" />
       <mesh ref={ref} geometry={geo} position={[0.78, h - 0.6, 0]} castShadow>
@@ -256,7 +256,7 @@ function Fountain() {
       <C p={[0, 0.46, 0]} r={FOUNTAIN.r - 0.15} h={0.06} c="#5fb3d6" seg={32} rough={0.1} />
       <C p={[0, 0.8, 0]} r={0.18} h={0.8} c="#cfc8bc" seg={12} />
       <C p={[0, 1.2, 0]} r={0.75} r2={0.3} h={0.15} c="#cfc8bc" seg={24} />
-      <mesh ref={jet} position={[0, 1.65, 0]}><coneGeometry args={[0.55, 0.9, 16, 1, true]} /><meshStandardMaterial color="#9fdcf5" emissive="#bfe9fb" emissiveIntensity={0.25} transparent opacity={0.35} depthWrite={false} side={THREE.DoubleSide} /></mesh>
+      <mesh ref={jet} position={[0, 1.65, 0]} userData={{ live: true }}><coneGeometry args={[0.55, 0.9, 16, 1, true]} /><meshStandardMaterial color="#9fdcf5" emissive="#bfe9fb" emissiveIntensity={0.25} transparent opacity={0.35} depthWrite={false} side={THREE.DoubleSide} /></mesh>
       <C p={[0, 1.85, 0]} r={0.05} h={0.9} c="#e8f7fd" o={0.7} seg={8} />
     </group>
   );
