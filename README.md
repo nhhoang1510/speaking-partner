@@ -12,7 +12,7 @@ Luyện nói tiếng Anh với AI nhập vai, nói chuyện bằng giọng nói 
 
 1. Tạo API key tại https://console.groq.com/keys.
 2. Vào Vercel → project `speaking-partner` → Settings → Environment Variables, thêm `GROQ_API_KEY` = key vừa tạo.
-3. Có thể thêm `GROQ_MODEL` để đổi model (mặc định `llama-3.3-70b-versatile`).
+3. Có thể thêm `GROQ_MODEL` để đổi model (mặc định `openai/gpt-oss-20b`).
 4. Vào Deployments và chọn Redeploy.
 
 ## Chạy trên máy
