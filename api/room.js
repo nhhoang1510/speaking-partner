@@ -2,7 +2,7 @@
 // Stored in Upstash Redis (Vercel Marketplace, free plan) through its REST API: one hash "room",
 // one field per learner, dropped when the learner has not checked in for a while.
 //   GET  /api/room                                   -> { ok, users: [...] }
-//   POST /api/room { id, name, color, scene, phase, said, turns } -> { ok }   check in / update
+//   POST /api/room { id, name, color, scene, phase, said, ai, turns, x, z, free } -> { ok }   check in / update
 //   POST /api/room { id, leave: true }                                        -> { ok }   left the page
 export const config = { runtime: 'edge' };
 
@@ -55,7 +55,12 @@ export default async function handler(req) {
       phase: PHASES.includes(b.phase) ? b.phase : 'idle',
       said: str(b.said, 200),
       saidAt: Number(b.saidAt) || 0,
+      ai: str(b.ai, 300),                             // the AI character's last reply, so others can listen in
+      aiAt: Number(b.aiAt) || 0,
       turns: Math.max(0, Math.min(999, Number(b.turns) || 0)),
+      free: !!b.free,                                 // walking around by themselves: x, z is where they stand
+      x: Math.max(-50, Math.min(50, Math.round((Number(b.x) || 0) * 100) / 100)),
+      z: Math.max(-50, Math.min(50, Math.round((Number(b.z) || 0) * 100) / 100)),
     };
     await redis(['HSET', KEY, id, JSON.stringify(u)], ['EXPIRE', KEY, 3600]);
     return json({ ok: true });
