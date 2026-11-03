@@ -7,6 +7,9 @@ Luyện nói tiếng Anh với AI nhập vai, nói chuyện bằng giọng nói 
 - **AI trò chuyện**, chọn trong Cài đặt:
   - **Cloud (Groq)**: mặc định khi mở trang từ Vercel, dùng được trên điện thoại. Hàm `api/chat.js` của Vercel giữ API key `GROQ_API_KEY` (gói miễn phí của Groq) và gọi Groq thay cho trình duyệt.
   - **Ollama trên máy**: model `llama3.2:3b` chạy ngay trên laptop, miễn phí, không cần key.
+- **Giọng AI**, chọn trong Cài đặt:
+  - **Tự nhiên (cloud)**: dùng Groq Orpheus qua hàm `api/tts.js`, mỗi nhân vật có một giọng riêng. Lần đầu phải vào https://console.groq.com/playground?model=canopylabs%2Forpheus-v1-english và đồng ý điều khoản. Khi hết lượt miễn phí, app tự chuyển sang giọng của máy.
+  - **Giọng của máy**: giọng đọc có sẵn của trình duyệt.
 
 ## Cấu hình AI cloud (một lần)
 
