@@ -187,7 +187,8 @@ export default function App() {
 
   const start = sc => { listener.stop(); eng.start(sc, memoryFor(sc.id, history)); };
   const pick = sc => { setSheet(null); setWalk(false); if (!s.scene || s.scene.id !== sc.id) start(sc); };
-  const leave = () => { eng.leave(); setView(v => ({ ...v, n: v.n + 1 })); };
+  // back to the whole school: out of the room, out of first person, camera back to the overview
+  const leave = () => { eng.leave(); setWalk(false); setSheet(null); setView({ fit: 1, n: view.n + 1 }); };
   const toggleWalk = () => { listener.unlock(); setWalk(w => !w); setWalkRoom(null); setSheet(null); };
   const toggleListen = id => {
     listener.unlock();
@@ -217,7 +218,7 @@ export default function App() {
         </aside>
 
         <aside className="panel right" aria-label={s.scene ? 'Hội thoại' : 'Hoạt động'}>
-          {s.scene ? <Talk s={s} eng={eng} cfg={cfg} />
+          {s.scene ? <Talk s={s} eng={eng} cfg={cfg} onClose={leave} />
             : right === 'feed' ? <Feed feed={feed} ai={ai} tabs={<RightTabs right={right} setRight={setRight} />} />
             : right === 'history' ? <History history={history} tabs={<RightTabs right={right} setRight={setRight} />} onOpen={setRight}
                 onDelete={id => setHistory(deleteSession(id))} />
@@ -269,7 +270,7 @@ function TopBar({ s, cfg, set, n, onSettings, onLeave, onEnd }) {
       </div>
       {s.scene
         ? <div className="top-actions">
-            <button className="ghost" onClick={onLeave}>← <span className="wide">Rời phòng</span></button>
+            <button className="ghost" onClick={onLeave}>← Toàn cảnh</button>
             <button className="ghost strong" onClick={onEnd}><span className="wide">Kết thúc &amp; nhận xét</span><span className="narrow">Kết thúc</span></button>
           </div>
         : <div className="levels" role="radiogroup" aria-label="Trình độ">
@@ -478,7 +479,7 @@ function ViewBar({ view, setView, sheet, setSheet, onWalk }) {
 }
 
 // ---------------------------------------------------------------- conversation
-function Talk({ s, eng, cfg }) {
+function Talk({ s, eng, cfg, onClose }) {
   const chatRef = useRef(null);
   useEffect(() => { const c = chatRef.current; if (c) c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' }); }, [s.msgs.length, s.msgs[s.msgs.length - 1]?.text, s.summary]);
   const sc = s.scene;
@@ -490,11 +491,17 @@ function Talk({ s, eng, cfg }) {
           <div className="persona-name">{sc.name} <span className="chip">{sc.title}</span></div>
           <div className="persona-role">{sc.role}</div>
         </div>
+        <button className="close-room" onClick={onClose} aria-label="Rời phòng, về toàn cảnh" title="Về toàn cảnh">✕</button>
       </div>
       <div className="chat" ref={chatRef} aria-live="polite">
         <AnimatePresence initial={false}>
           {s.msgs.map(m => <Msg key={m.id} m={m} eng={eng} showAi={cfg.showAi} />)}
           {s.summary && <Summary key="sum" sum={s.summary} />}
+          {s.summary && !s.summary.loading && (
+            <motion.div key="back" className="after-sum" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+              <button className="primary" style={{ padding: "11px 22px" }} onClick={onClose}>← Về toàn cảnh</button>
+            </motion.div>
+          )}
         </AnimatePresence>
       </div>
     </section>

@@ -432,3 +432,9 @@ html, body, #root { height: 100%; overflow: hidden; }
             padding: 10px 16px; border-radius: 14px; background: rgba(20,24,20,.6); color: #fff; font: 600 14px var(--sans);
             animation: look-tip 6s ease forwards; max-width: 80vw; }
 @keyframes look-tip { 0%, 75% { opacity: 1; } 100% { opacity: 0; visibility: hidden; } }
+
+/* ways out of a room */
+.close-room { margin-left: auto; flex: none; width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); background: var(--glass-strong);
+              color: var(--ink); font-size: 16px; cursor: pointer; display: grid; place-items: center; }
+.close-room:hover { background: var(--accent-soft); }
+.after-sum { display: flex; justify-content: center; padding: 6px 0 12px; }
