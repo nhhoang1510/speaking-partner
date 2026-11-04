@@ -9,12 +9,13 @@ import { Listener, voiceFor } from './lib/listen.js';
 
 // the whole app is the 3D school; panels float around it
 const School = lazy(() => import('./School.jsx'));
+const MiniMap = lazy(() => import('./MiniMap.jsx'));
 
 const LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname);
 // the AI is chosen by where the page runs, not by the user: the deployed site uses the cloud,
 // a local dev server uses Ollama on this computer
 const AI = LOCAL ? { provider: 'ollama', url: 'http://localhost:11434', model: 'llama3.2:3b' } : { provider: 'cloud' };
-const DEFAULTS = { level: 'intermediate', voice: '', rate: 1, pause: 1.4, showAi: true, feedback: true };
+const DEFAULTS = { level: 'intermediate', voice: '', rate: 1, pause: 1.4, showAi: true, feedback: true, sky: 'auto' };
 const spring = { type: 'spring', stiffness: 260, damping: 26 };
 const SCENE = Object.fromEntries(SCENES.map(s => [s.id, s]));
 const STATUS = {
@@ -84,6 +85,7 @@ export default function App() {
   const [walkRoom, setWalkRoom] = useState(null);      // the room I'm standing in while walking
   const stick = useRef({});                            // the on-screen joystick, read by the 3D scene
   const pos = useRef({ x: 0, z: 0 });
+  const track = useRef(null);                          // my walking state in the 3D view, for the map
   const listenerRef = useRef(null);
   if (!listenerRef.current) listenerRef.current = new Listener();
   const listener = listenerRef.current;
@@ -204,8 +206,8 @@ export default function App() {
     <MotionConfig reducedMotion="user">
       <div className="world" aria-label="Sơ đồ trường học">
         <Suspense fallback={null}>
-          <School users={users} meId={meLocal.id} stars={prog.room} focus={s.scene ? s.scene.id : null} fit={view.fit} nonce={view.n} onPick={pick}
-            walk={walk} input={stick.current} onMove={onMove} onRoom={onRoom} />
+          <School users={users} meId={meLocal.id} stars={prog.room} sky={cfg.sky} focus={s.scene ? s.scene.id : null} fit={view.fit} nonce={view.n} onPick={pick}
+            walk={walk} input={stick.current} onMove={onMove} onRoom={onRoom} track={track} />
         </Suspense>
       </div>
       <AnimatePresence>{booting && <Preloader key="pre" />}</AnimatePresence>
@@ -226,6 +228,7 @@ export default function App() {
             : <Session x={right} onBack={() => setRight('history')} onAgain={() => pick(SCENE[right.scene])} />}
         </aside>
 
+        {walk && <Suspense fallback={null}><MiniMap track={track} onGo={id => { if (track.current) track.current.goto = id; }} /></Suspense>}
         <div className="bottom">
           {walk && <Stick input={stick.current} />}
           {walk && <div className="look-tip touch-only">Kéo nút tròn lên/xuống để đi, sang trái/phải để quay · hoặc vuốt màn hình để nhìn quanh</div>}
@@ -681,6 +684,12 @@ function Settings({ cfg, set, onClose }) {
         <input id="pause" type="range" min="0.8" max="3" step="0.1" value={cfg.pause} onChange={e => set({ pause: Number(e.target.value) })} />
 
         <label className="switch"><input type="checkbox" checked={cfg.showAi} onChange={e => set({ showAi: e.target.checked })} /><span />Hiện chữ của AI <small>tắt để luyện nghe</small></label>
+        <div className="lbl">Thành phố</div>
+        <div className="sky-pick" role="radiogroup" aria-label="Ngày hay đêm">
+          {[['auto', 'Theo giờ thật'], ['day', 'Ban ngày'], ['night', 'Ban đêm']].map(([k, label]) => (
+            <button key={k} role="radio" aria-checked={cfg.sky === k} className={cfg.sky === k ? 'on' : ''} onClick={() => set({ sky: k })}>{label}</button>
+          ))}
+        </div>
         <label className="switch"><input type="checkbox" checked={cfg.feedback} onChange={e => set({ feedback: e.target.checked })} /><span />Sửa câu của tôi</label>
 
       </motion.aside>

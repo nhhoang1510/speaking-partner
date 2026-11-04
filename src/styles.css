@@ -461,3 +461,22 @@ html, body, #root { height: 100%; overflow: hidden; }
 .week i.some { background: color-mix(in srgb, var(--ok) 55%, transparent); }
 .week i.full { background: var(--ok); }
 .week small { font: 600 10px var(--sans); color: var(--muted); }
+
+/* ---------------------------------------------------------------- the map while walking */
+.minimap { position: fixed; left: calc(16px + env(safe-area-inset-left, 0px)); top: calc(76px + env(safe-area-inset-top, 0px)); z-index: 3;
+  width: 260px; padding: 8px; border-radius: 16px; display: grid; gap: 4px; }
+.minimap svg { width: 100%; height: auto; display: block; }
+.minimap text { font: 700 8px var(--sans); fill: #fff; pointer-events: none; }
+.mm-room { cursor: pointer; }
+.mm-room:hover rect { stroke: #fff; stroke-width: 1.6; }
+.mm-me circle { fill: rgba(255, 255, 255, .35); }
+.mm-me path { fill: #e8432f; stroke: #fff; stroke-width: 1.2; stroke-linejoin: round; }
+.minimap small { font: 600 11px var(--sans); color: var(--muted); text-align: center; }
+.hud.in-room .minimap { display: none; }
+@media (max-width: 700px) {
+  .minimap { width: 132px; padding: 5px; top: calc(64px + env(safe-area-inset-top, 0px)); }
+  .minimap small { display: none; }
+}
+.sky-pick { display: flex; gap: 4px; padding: 3px; border-radius: 12px; background: var(--accent-soft); margin-bottom: 14px; }
+.sky-pick button { flex: 1; border: 0; background: none; padding: 7px 4px; border-radius: 9px; cursor: pointer; font: 600 13px var(--sans); color: var(--muted); }
+.sky-pick button.on { background: var(--glass-strong); color: var(--ink); box-shadow: var(--shadow); }

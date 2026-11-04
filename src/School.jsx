@@ -4,13 +4,14 @@
 // doing and saying. Seen from above at an angle; the practice buildings have glass fronts and open tops.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { Html, OrbitControls, PerspectiveCamera, Sky } from '@react-three/drei';
+import { Html, OrbitControls, PerspectiveCamera, Sky, Stars } from '@react-three/drei';
 import * as THREE from 'three';
 import { SCENES } from './scenes.js';
 import { stars as starsOf } from './lib/history.js';
 import { Furniture, RoomFloor, hsl } from './world/props.jsx';
 import { Person } from './world/people.jsx';
 import { Bake } from './world/bake.jsx';
+import { Night, isNight } from './world/time.js';
 import { City, Storefront, blockedCity, LOTS, WALK_X, WALK_Z, EDGE_X, EDGE_Z, IN_W, IN_D, roofOf } from './world/city.jsx';
 
 const MOBILE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -172,6 +173,12 @@ function Learner({ u, target, me, now, pilot, viewer }) {
 const step = new THREE.Vector3();
 function drive(pilot, p, g, t, dt) {
   const k = pilot.input;
+  if (pilot.goto && ROOMS[pilot.goto]) {
+    // taken to a building from the map: stand at its door, facing in
+    const at = mouth(ROOMS[pilot.goto]);
+    p.x = at.x; p.z = at.z + 1.2; pilot.goto = null;
+    pilot.yaw = pilot.wantYaw = 0; pilot.pitch = pilot.wantPitch = -0.05; pilot.sent = 0;
+  }
   if (pilot.fresh) {
     // just stepped into my character: stand somewhere legal and look out of the door / down the street
     pilot.fresh = false;
@@ -204,8 +211,8 @@ function drive(pilot, p, g, t, dt) {
 }
 
 // the eyes of my character; drag anywhere on the scene to look around
-function FirstPerson({ pilot }) {
-  const cam = useRef();
+function FirstPerson({ pilot, night }) {
+  const cam = useRef(), lamp = useRef();
   const { gl } = useThree();
   useEffect(() => {
     const el = gl.domElement;
@@ -233,8 +240,13 @@ function FirstPerson({ pilot }) {
     }
     cam.current.position.set(pilot.pos.x, 1.5 + (pilot.bob || 0), pilot.pos.z);
     cam.current.rotation.set(pilot.pitch, pilot.yaw, 0, 'YXZ');
+    if (lamp.current) lamp.current.position.set(pilot.pos.x, 2.7, pilot.pos.z);
   });
-  return <PerspectiveCamera ref={cam} makeDefault fov={70} near={0.05} far={450} />;
+  // at night a warm light goes along with me, so rooms and the street close by are lit
+  return <>
+    <PerspectiveCamera ref={cam} makeDefault fov={70} near={0.05} far={450} />
+    {night && <pointLight ref={lamp} color="#ffe2b0" intensity={18} distance={14} decay={1.6} />}
+  </>;
 }
 
 // ---------------------------------------------------------------- the buildings
@@ -347,11 +359,13 @@ const KEYS = { KeyW: [0, 1], ArrowUp: [0, 1], KeyS: [0, -1], ArrowDown: [0, -1],
 
 // walk: I steer my own character (input.jx/jy come from the on-screen stick); onRoom(id|null) when I step
 // into or out of a room; onMove(x, z) now and then, so others see where I am
-export default function School({ users, meId, stars = {}, focus, fit = 1, nonce = 0, onPick, walk = false, input, onMove, onRoom }) {
+export default function School({ users, meId, stars = {}, sky = 'auto', focus, fit = 1, nonce = 0, onPick, walk = false, input, onMove, onRoom, track }) {
   const [now, setNow] = useState(Date.now());
+  const night = isNight(sky, new Date(now));
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
   const pilot = useMemo(() => ({ pos: new THREE.Vector3(), room: undefined, input: {}, yaw: Math.PI / 2, pitch: -0.05 }), []);
   Object.assign(pilot, { on: walk, input: input || pilot.input, onMove, onRoom });
+  if (track) track.current = walk ? pilot : null;
   useEffect(() => { pilot.room = undefined; pilot.sent = 0; pilot.fresh = true; pilot.pitch = pilot.wantPitch = -0.05; pilot.wantYaw = null; }, [walk]);
 
   useEffect(() => {
@@ -385,14 +399,16 @@ export default function School({ users, meId, stars = {}, focus, fit = 1, nonce 
     <Canvas orthographic shadows={!MOBILE} dpr={MOBILE ? (walk ? 1 : [1, 1.5]) : [1, 2]} camera={{ position: [32, 34, 40], zoom: 12, near: -300, far: 900 }}
       onCreated={st => { if (import.meta.env.DEV) window.__r3f = st; }} onPointerMissed={() => { document.body.style.cursor = ''; }}>
       <Quality />
-      <color attach="background" args={[walk ? '#cfe6f5' : '#dfe9d3']} />
-      {walk && <Sky distance={4000} sunPosition={[60, 40, 30]} turbidity={4} rayleigh={1.2} mieCoefficient={0.004} />}
-      {walk && <fog attach="fog" args={['#dbe9f2', 90, 320]} />}
-      <hemisphereLight args={['#fffaf0', walk ? '#efe6d6' : '#b7c49f', 1]} />
-      {walk && <ambientLight intensity={0.55} color="#fff4e6" />}
-      <directionalLight position={[30, 50, 22]} intensity={1.5} castShadow={!MOBILE} shadow-mapSize={[4096, 4096]}
+      <Night.Provider value={night}>
+      <color attach="background" args={[night ? (walk ? '#0e1726' : '#1b2638') : walk ? '#cfe6f5' : '#dfe9d3']} />
+      {walk && !night && <Sky distance={4000} sunPosition={[60, 40, 30]} turbidity={4} rayleigh={1.2} mieCoefficient={0.004} />}
+      {walk && night && <Stars radius={300} depth={60} count={2500} factor={6} fade speed={0.4} />}
+      {walk && <fog attach="fog" args={[night ? '#131d2e' : '#dbe9f2', 90, 320]} />}
+      <hemisphereLight args={night ? ['#9fb3e0', '#202838', walk ? 0.45 : 0.75] : ['#fffaf0', walk ? '#efe6d6' : '#b7c49f', 1]} />
+      {walk && <ambientLight intensity={night ? 0.18 : 0.55} color={night ? '#9fb3e0' : '#fff4e6'} />}
+      <directionalLight position={[30, 50, 22]} intensity={night ? 0.45 : 1.5} color={night ? '#a9bcff' : '#ffffff'} castShadow={!MOBILE} shadow-mapSize={[4096, 4096]}
         shadow-camera-left={-105} shadow-camera-right={105} shadow-camera-top={95} shadow-camera-bottom={-95} shadow-camera-far={220} shadow-bias={-0.0005} />
-      <Bake key={walk ? 'walk' : 'view'}>
+      <Bake key={(walk ? 'walk' : 'view') + (night ? ':night' : '')}>
       <City walk={walk} />
       {Object.values(ROOMS).map(r => (
         <Room key={r.scene.id} room={r} count={count[r.scene.id]} busy={busy[r.scene.id]}
@@ -401,12 +417,13 @@ export default function School({ users, meId, stars = {}, focus, fit = 1, nonce 
       </Bake>
       {users.map(u => <Learner key={u.id} u={u} target={targets[u.id]} me={u.id === meId} now={now} pilot={u.id === meId ? pilot : null} viewer={pilot} />)}
       {walk
-        ? <FirstPerson pilot={pilot} />
+        ? <FirstPerson pilot={pilot} night={night} />
         : <>
             <OrbitControls makeDefault enableDamping screenSpacePanning={false} minZoom={2} maxZoom={140}
               minPolarAngle={0.5} maxPolarAngle={1.1} target={[0, 2, 0]} />
             <Rig focus={focus} fit={fit} nonce={nonce} />
           </>}
+      </Night.Provider>
     </Canvas>
   );
 }
