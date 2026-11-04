@@ -1,16 +1,33 @@
-// The school as a little low-poly city: a grid of streets with lane markings, zebra crossings, traffic lights
+// The school as a little low-poly town: a grid of streets with lane markings, zebra crossings, traffic lights
 // and cars driving round the blocks. Every practice scene has its own building on its own block (a café, a
-// bank, a hotel, a clinic...), with a glass shop front and an open top so the overview can look inside; the
-// other blocks hold office towers, flats, the school itself, a park, a car park and a petrol station.
-// Every building's door faces +z (towards the overview camera). Blocks are BLK square, P apart; streets run
-// between them.
+// bank, a hotel, a clinic...), with a glass shop front and an open top so the overview can look inside. The
+// blocks around them hold the school itself, offices, flats, shops, houses, parks, a market, a hospital, a
+// station... (see blocks.jsx), and beyond the last street lies the countryside (outskirts.jsx).
+//
+// To grow the town: edit LAYOUT below (keep tall kinds behind or left of the practice buildings, so they don't
+// hide them from the overview camera, which looks from the south-east). Each cell is a scene id (a practice building: add its look to LOOK) or
+// the name of a block kind from KINDS in blocks.jsx. Add rows or columns freely: streets, pavements, walking
+// routes, traffic and the countryside all follow the grid. Every building's door faces +z (towards the
+// overview camera). Blocks are BLK square, P apart; streets run between them.
 import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
-import * as THREE from 'three';
-import { B, C, S, paint, rnd } from './props.jsx';
-import { Many, Tree, Car, Lamp, Bench, Clouds, tex } from './campus.jsx';
+import { B, C, S, rnd } from './props.jsx';
+import { Many, Tree, Car, Lamp, tex } from './campus.jsx';
+import { KINDS, Block, signTexture, stripes } from './blocks.jsx';
+import { Outskirts } from './outskirts.jsx';
 
-export const P = 20, BLK = 13, ROAD = P - BLK, NC = 5, NR = 4;
+const LAYOUT = [
+  ['houses', 'houses', 'pitch', 'offices', 'station', 'offices', 'shops', 'houses', 'houses'],
+  ['houses', 'park', 'flats', 'tower', 'mall', 'tower', 'flats', 'hospital', 'houses'],
+  ['shops', 'flats', 'tower', 'flats', 'school', 'tower', 'flats', 'offices', 'shops'],
+  ['houses', 'offices', 'interview', 'accounting', 'finance', 'tax', 'bank', 'market', 'houses'],
+  ['houses', 'shops', 'hotel', 'airport', 'park', 'doctor', 'shop', 'houses', 'houses'],
+  ['houses', 'flats', 'friend', 'coffee', 'parking', 'free', 'fuel', 'shops', 'houses'],
+  ['houses', 'park', 'shops', 'market', 'pitch', 'shops', 'houses', 'park', 'houses'],
+  ['houses', 'houses', 'houses', 'houses', 'shops', 'houses', 'houses', 'houses', 'houses'],
+];
+
+export const P = 20, BLK = 13, ROAD = P - BLK, NC = LAYOUT[0].length, NR = LAYOUT.length;
 export const colX = c => (c - (NC - 1) / 2) * P, rowZ = r => (r - (NR - 1) / 2) * P;
 export const EDGE_X = (NC / 2) * P, EDGE_Z = (NR / 2) * P;      // centre lines of the outer streets
 const ROADS_X = Array.from({ length: NC + 1 }, (_, k) => (k - NC / 2) * P), ROADS_Z = Array.from({ length: NR + 1 }, (_, k) => (k - NR / 2) * P);
@@ -19,14 +36,13 @@ const SIDE = BLK / 2 - 0.8;
 export const WALK_Z = ROADS_Z.slice(0, -1).flatMap((_, r) => [rowZ(r) - SIDE, rowZ(r) + SIDE]);
 export const WALK_X = ROADS_X.slice(0, -1).flatMap((_, c) => [colX(c) - SIDE, colX(c) + SIDE]);
 
-// what stands on each block, back row first; scene ids are the practice buildings
-const LAYOUT = [
-  ['tower', 'flats', 'school', 'tower2', 'flats2'],
-  ['interview', 'accounting', 'finance', 'tax', 'bank'],
-  ['hotel', 'airport', 'park', 'doctor', 'shop'],
-  ['friend', 'coffee', 'parking', 'free', 'fuel'],
-];
-export const LOTS = Object.fromEntries(LAYOUT.flatMap((row, r) => row.map((id, c) => [id, { x: colX(c), z: rowZ(r), r, c }])));
+// every block: what stands on it, where, and a seed so repeated kinds differ
+const CELLS = LAYOUT.flatMap((row, r) => row.map((id, c) => ({ id, x: colX(c), z: rowZ(r), r, c, seed: r * 31 + c * 7 + 1 })));
+export const LOTS = Object.fromEntries(CELLS.map(L => [L.id, L]));      // by id (practice buildings are unique)
+const cellAt = (x, z) => {
+  const c = Math.round(x / P + (NC - 1) / 2), r = Math.round(z / P + (NR - 1) / 2);
+  return c >= 0 && c < NC && r >= 0 && r < NR ? CELLS[r * NC + c] : null;
+};
 
 // the look of each practice building: facade, sign, floors above the shop, an awning
 const LOOK = {
@@ -45,49 +61,6 @@ const LOOK = {
 };
 
 export const roofOf = id => H + ((LOOK[id] && LOOK[id].up) || 0);   // the top of a practice building
-
-// ---------------------------------------------------------------- textures
-function signTexture(text, bg, fg = '#ffffff') {
-  return paint('sign:' + text + bg + fg, 512, 80, (g, w, h) => {
-    g.fillStyle = bg; g.fillRect(0, 0, w, h);
-    g.fillStyle = 'rgba(255,255,255,.18)'; g.fillRect(0, 0, w, 6); g.fillStyle = 'rgba(0,0,0,.18)'; g.fillRect(0, h - 6, w, 6);
-    let size = 52; g.font = `800 ${size}px system-ui, sans-serif`;
-    while (g.measureText(text).width > w - 40 && size > 16) { size -= 2; g.font = `800 ${size}px system-ui, sans-serif`; }
-    g.fillStyle = fg; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, w / 2, h / 2 + 2);
-  }, [1, 1]);
-}
-// one storey-high bay of a facade: wall colour around a window (repeat it over a wall)
-function windows(wall, glass, repeat, strip) {
-  return paint('win:' + wall + glass + strip, 64, 64, (g, w, h) => {
-    g.fillStyle = wall; g.fillRect(0, 0, w, h);
-    const grd = g.createLinearGradient(0, 10, 0, 54); grd.addColorStop(0, glass); grd.addColorStop(1, '#e8f4fb');
-    g.fillStyle = grd;
-    if (strip) g.fillRect(0, 12, w, 40); else g.fillRect(12, 12, 40, 40);
-    g.fillStyle = 'rgba(255,255,255,.55)'; g.fillRect(strip ? 0 : 12, 12, strip ? w : 40, 3);
-  }, repeat);
-}
-function stripes(a, b) {
-  return paint('stripe:' + a + b, 64, 8, (g, w, h) => { for (let i = 0; i < 8; i++) { g.fillStyle = i % 2 ? b : a; g.fillRect(i * 8, 0, 8, h); } }, [6, 1]);
-}
-
-// a box with windows on its four sides and a plain roof
-function Block({ p, s, wall, glass = '#7fb2d6', strip, roof = '#9aa0a6' }) {
-  const [w, h, d] = s;
-  const side = useMemo(() => windows(wall, glass, [Math.max(1, Math.round(w / 1.8)), Math.max(1, Math.round(h / 1.6))], strip), [wall, glass, w, h, strip]);
-  const end = useMemo(() => windows(wall, glass, [Math.max(1, Math.round(d / 1.8)), Math.max(1, Math.round(h / 1.6))], strip), [wall, glass, d, h, strip]);
-  return (
-    <group position={p}>
-      <mesh position={[0, h / 2, 0]} castShadow receiveShadow>
-        <boxGeometry args={[w, h, d]} />
-        {[end, end, null, null, side, side].map((m, i) => m
-          ? <meshStandardMaterial key={i} attach={`material-${i}`} map={m} roughness={0.6} />
-          : <meshStandardMaterial key={i} attach={`material-${i}`} color={roof} roughness={0.9} />)}
-      </mesh>
-      <B p={[0, h + 0.2, 0]} s={[w + 0.2, 0.4, d + 0.2]} c={wall} />
-      <B p={[0, h + 0.05, 0]} s={[w - 0.3, 0.12, d - 0.3]} c={roof} cast={false} />
-    </group>
-  );
-}
 
 // ---------------------------------------------------------------- the practice buildings
 export const IN_W = 7, IN_D = 7.5, H = 3.0, T = 0.25;          // inside size, storey height, wall thickness
@@ -162,113 +135,17 @@ function Plane({ p }) {                                     // a little airliner
   );
 }
 
-// ---------------------------------------------------------------- the other blocks
-function School({ x, z }) {
-  const sign = useMemo(() => signTexture('TRƯỜNG THPT NGUYỄN THÁI HỌC', '#1f5e46'), []);
-  return (
-    <group position={[x, 0, z]}>
-      <Block p={[0, 0, -1]} s={[10.5, 9.6, 6.5]} wall="#f1e3c6" glass="#86b6d6" roof="#b04a3a" />
-      <B p={[0, 1.6, 2.6]} s={[3, 3.2, 1.2]} c="#e7d3ad" />
-      <mesh position={[0, 3.6, 3.22]}><planeGeometry args={[7, 0.9]} /><meshStandardMaterial map={sign} /></mesh>
-      <B p={[0, 3.6, 3.15]} s={[7.2, 1.0, 0.1]} c="#1f5e46" />
-      <C p={[3.8, 4, 4.3]} r={0.06} h={8} c="#ccc" metal={0.6} seg={8} />
-      <B p={[4.35, 7.4, 4.3]} s={[1.1, 0.7, 0.03]} c="#da251d" />
-      <S p={[4.35, 7.4, 4.33]} r={0.12} c="#ffde00" sc={[1, 1, 0.2]} />
-    </group>
-  );
-}
-
-function Park({ x, z }) {
-  const jet = useRef();
-  useFrame(({ clock }) => { if (jet.current) jet.current.scale.y = 1 + Math.sin(clock.elapsedTime * 4) * 0.08; });
-  return (
-    <group position={[x, 0, z]}>
-      <B p={[0, 0.02, 0]} s={[BLK - 3.2, 0.04, BLK - 3.2]} c="#7fb562" cast={false} />
-      <B p={[0, 0.045, 0]} s={[BLK - 3.2, 0.01, 1.6]} c="#e3d9c6" cast={false} />
-      <B p={[0, 0.045, 0]} s={[1.6, 0.01, BLK - 3.2]} c="#e3d9c6" cast={false} />
-      <C p={[0, 0.25, 0]} r={1.8} h={0.5} c="#cfc8bc" seg={32} />
-      <C p={[0, 0.46, 0]} r={1.65} h={0.06} c="#5fb3d6" seg={32} rough={0.1} />
-      <C p={[0, 0.8, 0]} r={0.16} h={0.8} c="#cfc8bc" seg={12} />
-      <mesh ref={jet} position={[0, 1.5, 0]} userData={{ live: true }}><coneGeometry args={[0.5, 0.9, 16, 1, true]} /><meshStandardMaterial color="#9fdcf5" transparent opacity={0.35} depthWrite={false} side={THREE.DoubleSide} /></mesh>
-      {[[-3.4, -3.4], [3.4, -3.4], [-3.4, 3.4], [3.4, 3.4]].map(([a, b], i) => <Tree key={i} x={a} z={b} k={0.85} pine={i === 1} />)}
-      <Bench x={-2.6} z={0.95} r={Math.PI} /><Bench x={2.6} z={-0.95} />
-      {/* a little playground */}
-      <group position={[3.2, 0, 1.6]}>
-        <B p={[0, 1.1, 0]} s={[1.6, 0.08, 0.08]} c="#e84a5f" />
-        {[-0.8, 0.8].map(k => <B key={k} p={[k, 0.55, 0]} s={[0.08, 1.1, 0.08]} c="#e84a5f" />)}
-        <B p={[0, 0.4, 0]} s={[0.4, 0.04, 0.2]} c="#ffd166" />
-      </group>
-    </group>
-  );
-}
-
-function Parking({ x, z }) {
-  const cars = [[-2.6, -2.2, '#c0392b'], [0, -2.2, '#2e86de'], [2.6, -2.2, '#f5f6fa'], [-2.6, 2.6, '#10ac84'], [2.6, 2.6, '#f6b93b']];
-  return (
-    <group position={[x, 0, z]}>
-      <B p={[0, 0.02, 0]} s={[BLK - 3.2, 0.04, BLK - 3.2]} c="#55595e" cast={false} />
-      {[-3.9, -1.3, 1.3, 3.9].flatMap(a => [-2.2, 2.6].map(b => <B key={a + ':' + b} p={[a, 0.045, b]} s={[0.1, 0.01, 4]} c="#f2f2f2" cast={false} />))}
-      {cars.map(([a, b, c]) => <Car key={a + ':' + b} x={a} z={b} c={c} r={b < 0 ? 0 : Math.PI} />)}
-      <B p={[0, 2.5, -4.6]} s={[2.4, 0.9, 0.1]} c="#2e86de" /><B p={[0, 2.5, -4.54]} s={[0.5, 0.6, 0.02]} c="#ffffff" />
-      <C p={[0, 1.2, -4.65]} r={0.06} h={2.4} c="#666" />
-    </group>
-  );
-}
-
-function Fuel({ x, z }) {
-  const sign = useMemo(() => signTexture('FUEL · 24/7', '#d64545'), []);
-  return (
-    <group position={[x, 0, z]}>
-      <B p={[0, 0.02, 0]} s={[BLK - 3.2, 0.04, BLK - 3.2]} c="#cfd3d6" cast={false} />
-      <B p={[0, 3.6, 1]} s={[7, 0.4, 4.5]} c="#f4f4f4" />
-      <mesh position={[0, 3.6, 3.26]}><planeGeometry args={[6.8, 0.38]} /><meshStandardMaterial map={sign} /></mesh>
-      {[[-3, -1], [3, -1], [-3, 3], [3, 3]].map(([a, b]) => <B key={a + ':' + b} p={[a, 1.7, b]} s={[0.25, 3.4, 0.25]} c="#d64545" />)}
-      {[-1.5, 1.5].map(a => <group key={a} position={[a, 0, 1]}><B p={[0, 0.7, 0]} s={[0.6, 1.4, 0.4]} c="#e8e8e8" /><B p={[0, 1.1, 0.21]} s={[0.4, 0.3, 0.02]} c="#253040" /></group>)}
-      <Block p={[0, 0, -3.5]} s={[5, 3, 2.6]} wall="#d64545" glass="#bfe3f5" />
-    </group>
-  );
-}
-
-function Filler({ id, x, z }) {
-  if (id === 'tower') return <group position={[x, 0, z]}><Block p={[0, 0, 0]} s={[9, 22, 8]} wall="#8fa8bf" glass="#4f7ea8" strip /><B p={[0, 22.8, 0]} s={[4, 1.2, 3]} c="#d7dadd" /></group>;
-  if (id === 'tower2') return <group position={[x, 0, z]}><Block p={[-1, 0, 0]} s={[7, 28, 7]} wall="#3d4f63" glass="#6aa0c8" strip /><Block p={[3.2, 0, 1]} s={[4, 12, 6]} wall="#56708a" glass="#7fb2d6" /></group>;
-  if (id === 'flats' || id === 'flats2') {
-    const c = id === 'flats' ? '#e6c3a5' : '#b9d3c4';
-    const balconies = [];
-    for (let y = 3; y < 14; y += 3) for (let a = -3; a <= 3; a += 2) balconies.push([a, y - 1.3, 3.65]);
-    return (
-      <group position={[x, 0, z]}>
-        <Block p={[0, 0, -0.5]} s={[9.5, 14, 7.5]} wall={c} />
-        {balconies.map(([a, y, b]) => <group key={a + ':' + y}><B p={[a, y, b]} s={[1.5, 0.1, 0.9]} c="#f4f1ea" /><B p={[a, y + 0.45, b + 0.42]} s={[1.5, 0.8, 0.05]} c="#ffffff" o={0.7} /></group>)}
-      </group>
-    );
-  }
-  if (id === 'school') return <School x={x} z={z} />;
-  if (id === 'park') return <Park x={x} z={z} />;
-  if (id === 'parking') return <Parking x={x} z={z} />;
-  if (id === 'fuel') return <Fuel x={x} z={z} />;
-  return null;
-}
-// solid footprints of the other blocks, for walking (relative to the block centre)
-const SOLID = {
-  tower: [[0, 0, 9, 8]], tower2: [[-1, 0, 7, 7], [3.2, 1, 4, 6]], flats: [[0, -0.5, 9.5, 7.5]], flats2: [[0, -0.5, 9.5, 7.5]],
-  school: [[0, -1, 10.5, 6.5], [0, 2.6, 3, 1.2]], fuel: [[0, -3.5, 5, 2.6]],
-  parking: [[-2.6, -2.2, 1.9, 4.2], [0, -2.2, 1.9, 4.2], [2.6, -2.2, 1.9, 4.2], [-2.6, 2.6, 1.9, 4.2], [2.6, 2.6, 1.9, 4.2]],
-  park: [[0, 0, 3.8, 3.8]],
-};
-
 // walking: true where something solid stands (other buildings, parked cars, the practice buildings' walls)
 export function blockedCity(x, z) {
-  for (const [id, L] of Object.entries(LOTS)) {
-    const dx = x - L.x, dz = z - L.z;
-    if (Math.abs(dx) > BLK / 2 || Math.abs(dz) > BLK / 2) continue;
-    if (LOOK[id]) {
+  const L = cellAt(x, z), dx = L && x - L.x, dz = L && z - L.z;
+  if (L && Math.abs(dx) < BLK / 2 && Math.abs(dz) < BLK / 2) {
+    if (LOOK[L.id]) {
       const ox = IN_W / 2 + T + 0.15, oz = IN_D / 2 + T + 0.15;
       if (Math.abs(dx) > ox || Math.abs(dz) > oz) return false;                   // outside the building
       if (Math.abs(dx) < IN_W / 2 - 0.15 && Math.abs(dz) < IN_D / 2 - 0.15) return false;   // inside the room
       return !(dz > 0 && Math.abs(dx) < DOOR / 2 - 0.15);                           // the doorway
     }
-    return (SOLID[id] || []).some(([a, b, w, d]) => Math.abs(dx - a) < w / 2 + 0.2 && Math.abs(dz - b) < d / 2 + 0.2);
+    return ((KINDS[L.id] && KINDS[L.id].solid) || []).some(([a, b, w, d]) => Math.abs(dx - a) < w / 2 + 0.2 && Math.abs(dz - b) < d / 2 + 0.2);
   }
   return PARKED.some(([a, b, r]) => Math.abs(x - a) < (r ? 2.3 : 1.15) && Math.abs(z - b) < (r ? 1.15 : 2.3));
 }
@@ -282,7 +159,7 @@ const PARKED = (() => {
   return out;
 })();
 
-function Streets({ walk }) {
+function Streets() {
   const W = 2 * EDGE_X + ROAD, D = 2 * EDGE_Z + ROAD;
   const asphalt = useMemo(() => tex('asphalt', [W / 8, D / 8]), []);
   const pave = useMemo(() => tex('paving', [BLK / 2, BLK / 2]), []);
@@ -306,13 +183,12 @@ function Streets({ walk }) {
   }, []);
   const trees = useMemo(() => {
     const out = [];
-    LAYOUT.forEach((row, r) => row.forEach((id, c) => {
-      const x = colX(c), z = rowZ(r);
+    CELLS.forEach(({ id, x, z }) => {
       const kerb = BLK / 2 - 0.4;                                                    // along the kerb, clear of the walkers
       [-4.2, 4.2].forEach(dx => out.push({ x: x + dx, z: z + kerb }));
-      if (r === 0 || id === 'park') return;
+      if (['park', 'pitch', 'houses', 'market', 'tower', 'flats'].includes(id)) return;
       [-1, 1].forEach(k => out.push({ x: x + k * kerb, z: z - 3 }));
-    }));
+    });
     return out.map((t, i) => ({ ...t, k: 0.62, pine: i % 4 === 3 }));
   }, []);
   return (
@@ -323,8 +199,8 @@ function Streets({ walk }) {
       <Many geo={<boxGeometry args={[1.3, 0.01, 0.14]} />} c="#f2e6a0" cast={false} at={marks.dash} />
       <Many geo={<boxGeometry args={[0.55, 0.01, 1.9]} />} c="#f4f4f4" cast={false} at={marks.zebra} />
       {/* blocks: a paved pavement all round with a kerb */}
-      {LAYOUT.flatMap((row, r) => row.map((id, c) => (
-        <group key={id} position={[colX(c), 0, rowZ(r)]}>
+      {CELLS.map(({ r, c }) => (
+        <group key={r + ':' + c} position={[colX(c), 0, rowZ(r)]}>
           <mesh rotation-x={-Math.PI / 2} position={[0, 0.06, 0]} receiveShadow>
             <planeGeometry args={[BLK, BLK]} /><meshStandardMaterial map={pave} roughness={0.85} />
           </mesh>
@@ -332,14 +208,13 @@ function Streets({ walk }) {
             <B key={a + ':' + b} p={[a, 0.07, b]} s={[w, 0.14, d]} c="#c9c4ba" cast={false} />
           ))}
         </group>
-      )))}
+      ))}
       {trees.map((t, i) => <Tree key={i} {...t} />)}
       {/* street lamps on the corners, and traffic lights at the crossroads */}
-      {LAYOUT.flatMap((row, r) => row.map((_, c) => <Lamp key={r + ':' + c} x={colX(c) + BLK / 2 - 0.4} z={rowZ(r) + BLK / 2 - 0.4} />))}
+      {CELLS.map(({ r, c }) => <Lamp key={r + ':' + c} x={colX(c) + BLK / 2 - 0.4} z={rowZ(r) + BLK / 2 - 0.4} />)}
       {ROADS_X.slice(1, -1).flatMap(x => ROADS_Z.slice(1, -1).map(z => <TrafficLight key={x + ':' + z} x={x - ROAD / 2 - 0.4} z={z + ROAD / 2 + 0.4} />))}
       {PARKED.map(([x, z, along, c], i) => <Car key={i} x={x} z={z} c={c} r={along ? Math.PI / 2 : 0} />)}
       <Traffic />
-      {walk && <Clouds />}
     </group>
   );
 }
@@ -355,13 +230,18 @@ function TrafficLight({ x, z }) {
 }
 
 // cars driving round the blocks, on the right-hand side of the road
+// (rings round the middle of town, and two runs across it; direction alternates)
 const LOOPS = [
-  [[-EDGE_X, -EDGE_Z], [EDGE_X, -EDGE_Z], [EDGE_X, EDGE_Z], [-EDGE_X, EDGE_Z]],
-  [[ROADS_X[1], ROADS_Z[1]], [ROADS_X[1], ROADS_Z[3]], [ROADS_X[4], ROADS_Z[3]], [ROADS_X[4], ROADS_Z[1]]],
-  [[ROADS_X[2], ROADS_Z[0]], [ROADS_X[3], ROADS_Z[0]], [ROADS_X[3], ROADS_Z[4]], [ROADS_X[2], ROADS_Z[4]]],
-  [[ROADS_X[0], ROADS_Z[2]], [ROADS_X[5], ROADS_Z[2]], [ROADS_X[5], ROADS_Z[3]], [ROADS_X[0], ROADS_Z[3]]],
+  ...Array.from({ length: Math.floor(Math.min(NC, NR) / 2) }, (_, k) => {
+    const x0 = ROADS_X[k], x1 = ROADS_X[NC - k], z0 = ROADS_Z[k], z1 = ROADS_Z[NR - k];
+    const ring = [[x0, z0], [x1, z0], [x1, z1], [x0, z1]];
+    return k % 2 ? ring.reverse() : ring;
+  }),
+  [[ROADS_X[0], ROADS_Z[Math.floor(NR / 2)]], [ROADS_X[NC], ROADS_Z[Math.floor(NR / 2)]], [ROADS_X[NC], ROADS_Z[Math.floor(NR / 2) + 1]], [ROADS_X[0], ROADS_Z[Math.floor(NR / 2) + 1]]],
+  [[ROADS_X[Math.floor(NC / 2)], ROADS_Z[0]], [ROADS_X[Math.floor(NC / 2)], ROADS_Z[NR]], [ROADS_X[Math.floor(NC / 2) + 1], ROADS_Z[NR]], [ROADS_X[Math.floor(NC / 2) + 1], ROADS_Z[0]]],
 ];
-const MOVERS = [[0, 0, '#e74c3c'], [0, 0.5, '#f1c40f'], [1, 0.1, '#2e86de'], [1, 0.6, '#ffffff'], [2, 0.3, '#16a085'], [3, 0.2, '#e67e22'], [3, 0.7, '#8e44ad']];
+const PAINTS = ['#e74c3c', '#f1c40f', '#2e86de', '#ffffff', '#16a085', '#e67e22', '#8e44ad', '#2c3e50'];
+const MOVERS = LOOPS.flatMap((_, li) => [0, 0.34, 0.67].map((off, k) => [li, off + li * 0.11, PAINTS[(li * 3 + k) % PAINTS.length]]));
 function Traffic() {
   const refs = useRef([]);
   const loops = useMemo(() => LOOPS.map(pts => {
@@ -385,26 +265,14 @@ function Traffic() {
 
 // ---------------------------------------------------------------- the whole town
 export function City({ walk }) {
-  const grass = useMemo(() => tex('grass', [60, 60]), []);
-  // far-off buildings all round, so the town doesn't end at the last street
-  const skyline = useMemo(() => {
-    const r = rnd(5), out = [];
-    for (let i = 0; i < 46; i++) {
-      const a = (i / 46) * Math.PI * 2, d = 78 + r() * 24;
-      const front = Math.cos(a) * 0.6 + Math.sin(a) * 0.8 > -0.1;                      // between the overview camera and the town
-      out.push({ front, x: Math.cos(a) * d * 1.15, z: Math.sin(a) * d * 0.95, w: 6 + r() * 8, h: 6 + r() * 26, d: 6 + r() * 8, c: ['#b8c4cf', '#c9bfb2', '#a9b8a8', '#d0c7d6'][i % 4] });
-    }
-    return out;
-  }, []);
   return (
     <group>
-      <mesh rotation-x={-Math.PI / 2} position={[0, -0.02, 0]} receiveShadow><planeGeometry args={[400, 400]} /><meshStandardMaterial map={grass} /></mesh>
-      {[[-170, -90, 50], [-120, 120, 40], [60, -170, 55], [150, 110, 45], [-200, 30, 60]].map(([x, z, r]) => (
-        <mesh key={x} position={[x, -r * 0.6, z]} scale={[1, 0.6, 1]}><sphereGeometry args={[r, 24, 12]} /><meshStandardMaterial color="#8fb27a" /></mesh>
-      ))}
-      {skyline.filter(b => walk || !b.front).map((b, i) => <B key={i} p={[b.x, b.h / 2, b.z]} s={[b.w, b.h, b.d]} c={b.c} />)}
-      <Streets walk={walk} />
-      {Object.entries(LOTS).filter(([id]) => !LOOK[id]).map(([id, L]) => <Filler key={id} id={id} x={L.x} z={L.z} />)}
+      <Outskirts edgeX={EDGE_X} edgeZ={EDGE_Z} roadsX={ROADS_X} roadsZ={ROADS_Z} road={ROAD} walk={walk} />
+      <Streets />
+      {CELLS.filter(L => !LOOK[L.id] && KINDS[L.id]).map(L => {
+        const Kind = KINDS[L.id].draw;
+        return <group key={L.r + ':' + L.c} position={[L.x, 0, L.z]}><Kind seed={L.seed} /></group>;
+      })}
     </group>
   );
 }
