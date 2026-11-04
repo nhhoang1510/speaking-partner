@@ -21,7 +21,7 @@ const STATUS = {
   listening: sc => `Đang nói với ${sc.name}`, thinking: sc => `${sc.name} đang nghĩ`, speaking: sc => `Đang nghe ${sc.name} nói`,
   summary: () => 'Đang xem nhận xét', idle: sc => `Đang luyện ${sc.title}`,
 };
-const describe = u => { const sc = u.scene && SCENE[u.scene]; return sc ? (STATUS[u.phase] || STATUS.idle)(sc) : 'Đang ở hành lang'; };
+const describe = u => { const sc = u.scene && SCENE[u.scene]; return sc ? (STATUS[u.phase] || STATUS.idle)(sc) : 'Đang dạo phố'; };
 const hhmm = t => new Date(t).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
 
 function loadSettings() {
@@ -49,7 +49,7 @@ function events(prev, users, meId) {
     if (!p) { out.push({ t: now, c: u.color, text: `${who(u)} vào trường` }); if (!u.scene) continue; }
     if (!p || p.scene !== u.scene) {
       if (u.scene) out.push({ t: now, c: u.color, text: `${who(u)} vào phòng ${SCENE[u.scene] ? SCENE[u.scene].title : ''}` });
-      else if (p) out.push({ t: now, c: u.color, text: `${who(u)} ra hành lang` });
+      else if (p) out.push({ t: now, c: u.color, text: `${who(u)} ra phố` });
     }
     // a finished sentence: the learner stopped talking and the AI started thinking
     if (p && p.phase === 'listening' && u.phase !== 'listening' && u.said) out.push({ t: now, c: u.color, text: `${who(u)}: “${u.said}”`, said: true });

@@ -1,34 +1,31 @@
-// The school, in 3D: one open hall with a practice area per scene along a winding promenade, each furnished
-// for its situation and staffed by that scene's AI character. Every learner online is a little character: they
-// wait on the promenade, walk into the area they practise in, and show what they are doing and saying.
-// Seen from above at an angle, with the near outer walls cut low so every area is visible.
+// The school, in 3D: a little town with a building for every practice scene (a café, a bank, a hotel...), each
+// furnished for its situation and staffed by that scene's AI character. Every learner online is a little
+// character: they stroll along the pavements, walk into the building they practise in, and show what they are
+// doing and saying. Seen from above at an angle; the practice buildings have glass fronts and open tops.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Html, OrbitControls, PerspectiveCamera, Sky } from '@react-three/drei';
 import * as THREE from 'three';
 import { SCENES } from './scenes.js';
-import { B, Furniture, RoomFloor, Window, hsl } from './world/props.jsx';
+import { Furniture, RoomFloor, hsl } from './world/props.jsx';
 import { Person } from './world/people.jsx';
 import { Bake } from './world/bake.jsx';
-import { Campus, Shell, blockedOutside, ROOM_XS, X0, BX, BZ, CX, LEN, FENCE, GATE } from './world/campus.jsx';
-import { Area, Promenade, blockedInside, islandGeometry, walkZ, CROSS, PLACES, ZA, ZB } from './world/open.jsx';
+import { City, Storefront, blockedCity, LOTS, WALK_X, WALK_Z, EDGE_X, EDGE_Z, IN_W, IN_D, roofOf } from './world/city.jsx';
 
 const MOBILE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 const SAID_SHOW_MS = 12000;
-const ENTRANCE = new THREE.Vector3(17, 0, 0);
-const TALL = 2.4, LOW = 0.35;                         // far outer walls, near walls
+const ENTRANCE = new THREE.Vector3(0, 0, EDGE_Z + 8);   // newcomers walk in from the south edge of town
 
-// areas, scattered over the hall, each turned to open onto a walk (local +z points out of the open side);
-// `north` ones have their back to the far side, away from the overview camera
+// a building per scene, all with their door to +z (towards the overview camera)
 export const ROOMS = Object.fromEntries(SCENES.map((sc, i) => {
-  const [x, z, rot] = PLACES[i];
-  return [sc.id, { scene: sc, i, north: Math.cos(rot) > 0, pos: new THREE.Vector3(x, 0, z), rot }];
+  const L = LOTS[sc.id];
+  return [sc.id, { scene: sc, i, north: true, pos: new THREE.Vector3(L.x, 0, L.z), rot: 0 }];
 }));
 
 
 export function describe(u) {
   const r = u.scene && ROOMS[u.scene];
-  if (!r) return 'Đang ở hành lang';
+  if (!r) return 'Đang dạo phố';
   const sc = r.scene;
   return {
     listening: `Đang nói với ${sc.name}`, thinking: `${sc.name} đang nghĩ`, speaking: `Đang nghe ${sc.name} nói`,
@@ -36,35 +33,31 @@ export function describe(u) {
   }[u.phase] || `Đang luyện ${sc.title}`;
 }
 
-// walking freely: anywhere in the hall except through columns, trees and screens; an area counts as entered
-// once I'm on its floor
+// walking freely: anywhere in town but through buildings, walls and parked cars; a building counts as entered
+// once I'm inside it
 const ROOM_LIST = Object.values(ROOMS);
 export function roomAt(x, z) {
-  return ROOM_LIST.find(r => {
-    const dx = x - r.pos.x, dz = z - r.pos.z, c = Math.cos(r.rot), s = Math.sin(r.rot);
-    return Math.abs(c * dx - s * dz) < ZA - 0.3 && Math.abs(s * dx + c * dz) < ZB - 0.3;
-  }) || null;
+  return ROOM_LIST.find(r => Math.abs(x - r.pos.x) < IN_W / 2 - 0.2 && Math.abs(z - r.pos.z) < IN_D / 2 - 0.2) || null;
 }
 function canStand(x, z) {
-  // outside: anywhere on the grounds inside the fence (and out through the gate to the street)
-  if (x > BX + 0.45 || x < X0 - 0.45 || Math.abs(z) > BZ + 0.45) {
-    const inFence = x > FENCE.x0 + 0.4 && z > FENCE.z0 + 0.4 && z < FENCE.z1 - 0.4 && (x < FENCE.x1 - 0.4 || (Math.abs(z) < GATE - 0.3 && x < 47));
-    return inFence && !blockedOutside(x, z);
-  }
-  const hall = x > X0 + 0.4 && x < BX - 0.35 && Math.abs(z) < BZ - 0.4, door = x < BX + 0.45 && x > BX - 1 && Math.abs(z) < 1.25;
-  return (hall || door) && !blockedInside(x, z, ROOM_LIST);
+  return Math.abs(x) < EDGE_X + 12 && Math.abs(z) < EDGE_Z + 12 && !blockedCity(x, z);
 }
 
-// first person: show a label only for who is near (the hall is open, so near is enough)
-function seen(viewer, x, z, range = 9) {
+// first person: show a label only for who is near and on my side of the walls
+function seen(viewer, x, z, range = 12) {
   if (!viewer || !viewer.on) return true;
+  const a = roomAt(viewer.pos.x, viewer.pos.z), b = roomAt(x, z);
+  if (a !== b) return false;
   return Math.hypot(viewer.pos.x - x, viewer.pos.z - z) < range;
 }
 
-// where a learner stands: along a walk when not practising, else in front of their area's character
+// where a learner stands: on a pavement when not practising, else in front of their building's character
 function spot(u, k) {
   const r = u.scene && ROOMS[u.scene];
-  if (!r) { const x = X0 + 3 + ((k * 3.7) % (LEN - 8)), side = k % 2 ? 1 : -1; return new THREE.Vector3(x, 0, walkZ(side, x) + (k % 4 < 2 ? 0.4 : -0.4)); }
+  if (!r) {
+    const lot = ROOM_LIST[(k * 5) % ROOM_LIST.length];
+    return new THREE.Vector3(lot.pos.x + ((k * 2.3) % 7) - 3.5, 0, near(WALK_Z, lot.pos.z + IN_D / 2 + 1.5) + (k % 2 ? 0.35 : -0.35));
+  }
   const local = new THREE.Vector3((k % 3 - 1) * 0.95, 0, 0.9 + Math.floor(k / 3) * 0.9);
   return local.applyAxisAngle(new THREE.Vector3(0, 1, 0), r.rot).add(r.pos);
 }
@@ -85,24 +78,23 @@ function Npc({ room, busy }) {
 }
 
 const local = (r, x, z) => new THREE.Vector3(x, 0, z).applyAxisAngle(new THREE.Vector3(0, 1, 0), r.rot).add(r.pos);
-const mouth = r => local(r, 0, ZB + 0.4);              // just outside an area's open side
-const onWalk = (side, x) => new THREE.Vector3(x, 0, walkZ(side, x));
+const mouth = r => local(r, 0, IN_D / 2 + 0.9);          // just outside the door
+const near = (lines, v) => lines.reduce((m, x) => Math.abs(x - v) < Math.abs(m - v) ? x : m);
 
-// the way from p to goal: out of the old area, along its walk, over a cross walk (or round by the front door)
-// if the new area opens onto the other walk, along that one, and in
+// the way from p to goal along the pavements: out of the door, along the street to the nearest corner, round
+// the blocks to the right street, along it, and in through the new door
 function route(p, goal) {
   const from = roomAt(p.x, p.z), to = roomAt(goal.x, goal.z), pts = [];
   if (from && from === to) return [goal.clone()];
-  let a = from ? mouth(from) : p.clone();
+  const a = from ? mouth(from) : p.clone(), b = to ? mouth(to) : goal;
   if (from) pts.push(a);
-  if (p.x > BX - 1) { a = new THREE.Vector3(BX - 1, 0, 0); pts.push(a); }
-  const b = to ? mouth(to) : goal, sa = a.z < 0 ? -1 : 1, sb = b.z < 0 ? -1 : 1;
-  pts.push(onWalk(sa, a.x));
-  if (sa !== sb) {
-    const cx = [...CROSS, 12].reduce((m, x) => Math.abs(a.x - x) + Math.abs(x - b.x) < Math.abs(a.x - m) + Math.abs(m - b.x) ? x : m);
-    pts.push(onWalk(sa, cx), onWalk(sb, cx));
+  const za = near(WALK_Z, a.z), zb = near(WALK_Z, b.z);
+  pts.push(new THREE.Vector3(a.x, 0, za));
+  if (za !== zb) {
+    const x = WALK_X.reduce((m, v) => Math.abs(a.x - v) + Math.abs(v - b.x) < Math.abs(a.x - m) + Math.abs(m - b.x) ? v : m);
+    pts.push(new THREE.Vector3(x, 0, za), new THREE.Vector3(x, 0, zb));
   }
-  pts.push(onWalk(sb, b.x));
+  pts.push(new THREE.Vector3(b.x, 0, zb));
   if (to) pts.push(mouth(to));
   pts.push(goal.clone());
   return pts;
@@ -130,7 +122,7 @@ function Learner({ u, target, me, now, pilot, viewer }) {
       if (dist < 0.06) path.current.shift();
       else {
         walking = true;
-        p.add(d.multiplyScalar(Math.min(1, (dt * 3.4) / dist)));
+        p.add(d.multiplyScalar(Math.min(1, (dt * 4.5) / dist)));
         const want = Math.atan2(goal.x - p.x, goal.z - p.z);
         g.current.rotation.y = want;
       }
@@ -180,9 +172,9 @@ const step = new THREE.Vector3();
 function drive(pilot, p, g, t, dt) {
   const k = pilot.input;
   if (pilot.fresh) {
-    // just stepped into my character: stand somewhere legal and look out of the area / down the hall
+    // just stepped into my character: stand somewhere legal and look out of the door / down the street
     pilot.fresh = false;
-    if (!canStand(p.x, p.z)) { p.x = Math.max(-12, Math.min(12, p.x)); p.z = walkZ(-1, p.x); }
+    if (!canStand(p.x, p.z)) { p.x = near(WALK_X, p.x); p.z = near(WALK_Z, p.z); }
     const r = roomAt(p.x, p.z);
     pilot.yaw = pilot.wantYaw = r ? r.rot + Math.PI : (p.x > 0 ? Math.PI / 2 : -Math.PI / 2);
     pilot.wantPitch = pilot.pitch;
@@ -197,7 +189,7 @@ function drive(pilot, p, g, t, dt) {
   const len = Math.min(1, step.length());
   let moving = false;
   if (len > 0.05) {
-    step.normalize().multiplyScalar(len * 3.2 * Math.min(dt, 0.05));
+    step.normalize().multiplyScalar(len * 4.2 * Math.min(dt, 0.05));
     const nx = p.x + step.x, nz = p.z + step.z;
     if (canStand(nx, nz)) { p.x = nx; p.z = nz; moving = true; }
     else if (canStand(nx, p.z)) { p.x = nx; moving = true; }
@@ -244,8 +236,8 @@ function FirstPerson({ pilot }) {
   return <PerspectiveCamera ref={cam} makeDefault fov={70} near={0.05} far={200} />;
 }
 
-// ---------------------------------------------------------------- the building
-// every area has its own colours: a feature colour for its rim and screen, a lighter one for its bench
+// ---------------------------------------------------------------- the buildings
+// every building has its own paint inside: a feature colour on the back wall, a lighter one on the side
 const PAINT = {
   friend: ['#f7dfb4', '#e39a4f'], coffee: ['#efd3bd', '#7d4f36'], interview: ['#dde5ee', '#34506f'],
   hotel: ['#f0e4c9', '#7a2e3a'], airport: ['#e2edf2', '#3f8fb4'], doctor: ['#e1f2ea', '#5fae8f'],
@@ -253,13 +245,13 @@ const PAINT = {
   accounting: ['#f6efd2', '#b8952e'], finance: ['#dcefeb', '#1f6f68'], tax: ['#f4e1dc', '#a8432f'], bank: ['#e1e6f4', '#2f3f7a'],
 };
 
-function Room({ room, count, busy, mine, onPick, viewer, full, island }) {
+function Room({ room, count, busy, mine, onPick, viewer, full }) {
   const [hover, setHover] = useState(false);
   const label = useRef();
   useFrame(() => {
     if (!label.current) return;
-    // walking: the sign of the area I'm in or close to
-    const near = !viewer.on || Math.hypot(viewer.pos.x - room.pos.x, viewer.pos.z - room.pos.z) < 6.5;
+    // walking: the sign of the building I'm in or close to
+    const near = !viewer.on || Math.hypot(viewer.pos.x - room.pos.x, viewer.pos.z - room.pos.z) < 9;
     label.current.style.display = near ? '' : 'none';
   });
   const { scene: sc } = room;
@@ -267,62 +259,19 @@ function Room({ room, count, busy, mine, onPick, viewer, full, island }) {
   return (
     <group position={room.pos}>
       <group rotation-y={room.rot}>
-        <RoomFloor id={sc.id} hue={sc.hue} geometry={island} bright={hover || mine}
+        <RoomFloor id={sc.id} hue={sc.hue} w={IN_W} d={IN_D} bright={hover || mine}
           onPointerOver={e => { e.stopPropagation(); setHover(true); document.body.style.cursor = 'pointer'; }}
           onPointerOut={() => { setHover(false); document.body.style.cursor = ''; }}
           onClick={e => { e.stopPropagation(); onPick(sc); }} />
-        <Area accent={accent} wall={wall} h={full ? 1.7 : room.north ? 1.1 : 0.7} full={full} />
-        <Furniture id={sc.id} hue={sc.hue} north={false} />
+        <Storefront id={sc.id} wall={wall} accent={accent} full={full} />
+        <Furniture id={sc.id} hue={sc.hue} north />
         <Npc room={room} busy={busy} />
       </group>
-      <Html position={[-Math.sin(room.rot) * 3, room.north ? 3.2 : 2, -Math.cos(room.rot) * 3]} center zIndexRange={[8, 0]}>
+      <Html position={full ? [0, 2.6, 0] : [0, roofOf(sc.id) + 1.3, -2.4]} center zIndexRange={[8, 0]}>
         <button ref={label} className={'w-room' + (mine ? ' mine' : '') + (hover ? ' hover' : '')} style={{ '--c': hsl(sc.hue, 55, 45) }} onClick={() => onPick(sc)}>
           {sc.title}<small>{sc.name}{count ? ` · ${count} người` : ''}</small>
         </button>
       </Html>
-    </group>
-  );
-}
-
-// the outer walls, plastered inside, with the windows; the far ones tall, the near ones cut low from above
-function Walls({ full }) {
-  const wall = '#efe5d6', top = '#d9cbb6', Z = BZ;
-  const W = (key, x, z, w, d, h0, h = full ? 2.8 : h0) => (
-    <group key={key}>
-      <B p={[x, h / 2, z]} s={[w, h, d]} c={wall} />
-      <B p={[x, h + 0.02, z]} s={[w + 0.02, 0.04, d + 0.02]} c={top} cast={false} />
-    </group>
-  );
-  const seg = Z - 1.5;
-  return (
-    <group>
-      {W('n', CX, -Z, LEN, 0.25, TALL)}
-      {W('w', X0, 0, 0.25, 2 * Z, TALL)}
-      {W('s', CX, Z, LEN, 0.25, LOW)}
-      {W('e1', BX, -(1.5 + seg / 2), 0.25, seg, LOW)}
-      {W('e2', BX, 1.5 + seg / 2, 0.25, seg, LOW)}
-      {ROOM_XS.flatMap(x => [-1.7, 1.7].map(dx => <Window key={'n' + x + dx} p={[x + dx, 1.45, -Z + 0.18]} w={1.6} />))}
-      {[-8.5, 8.5].map(z => <Window key={'w' + z} p={[X0 + 0.18, 1.45, z]} r={Math.PI / 2} w={2.2} />)}
-    </group>
-  );
-}
-
-function Grounds({ walk }) {
-  return (
-    <group>
-      <Campus walk={walk} />
-      <mesh rotation-x={-Math.PI / 2} position={[CX, 0, 0]} receiveShadow>
-        <planeGeometry args={[LEN, 2 * BZ]} /><meshStandardMaterial color="#efe7da" roughness={0.6} />
-      </mesh>
-      <Promenade full={walk} />
-      <Html position={[BX + 0.4, walk ? 3.45 : 2.6, 0]} center zIndexRange={[8, 0]}>
-        <div className="w-sign">Trường THPT Nguyễn Thái Học</div>
-      </Html>
-      {walk && (
-        <Html position={[FENCE.x1, 2.9, 0]} center zIndexRange={[8, 0]}>
-          <div className="w-sign">THPT Nguyễn Thái Học</div>
-        </Html>
-      )}
     </group>
   );
 }
@@ -334,9 +283,9 @@ function Rig({ focus, fit, nonce }) {
   const goal = useMemo(() => {
     const r = focus && ROOMS[focus];
     // phones in portrait: fill the width and let the sides run off, rather than a tiny whole school
-    const base = (size.width < 600 ? size.width / 34 : Math.min(size.width / 52, size.height / 40)) * fit;
+    const base = (size.width < 600 ? size.width / 60 : Math.min(size.width / 124, size.height / 66)) * fit;
     return r ? { target: r.pos.clone(), zoom: size.height < 500 && size.width > size.height ? size.height / 9 : Math.min(size.width / 13, size.height / 12) }
-             : { target: new THREE.Vector3(CX + 4, 0, 0), zoom: base };
+             : { target: new THREE.Vector3(0, 2, 0), zoom: base };
   }, [focus, size.width, size.height, fit, nonce]);
   useEffect(() => { anim.current = 1.4; }, [goal]);
   // phones: in a room the conversation covers the lower half, so show the room in the strip above it
@@ -403,30 +352,21 @@ export default function School({ users, meId, focus, fit = 1, nonce = 0, onPick,
   const count = {}, busy = {};
   users.forEach(u => { if (u.scene) { count[u.scene] = (count[u.scene] || 0) + 1; if (u.phase === 'speaking') busy[u.scene] = 'speaking'; } });
   const mine = users.find(u => u.id === meId);
-  const island = useMemo(() => islandGeometry(), []);
 
   return (
-    <Canvas orthographic shadows={!MOBILE} dpr={MOBILE ? (walk ? 1 : [1, 1.5]) : [1, 2]} camera={{ position: [CX + 28, 26, 24], zoom: 30, near: -200, far: 400 }}
+    <Canvas orthographic shadows={!MOBILE} dpr={MOBILE ? (walk ? 1 : [1, 1.5]) : [1, 2]} camera={{ position: [32, 34, 40], zoom: 12, near: -300, far: 600 }}
       onCreated={st => { if (import.meta.env.DEV) window.__r3f = st; }} onPointerMissed={() => { document.body.style.cursor = ''; }}>
       <color attach="background" args={[walk ? '#cfe6f5' : '#dfe9d3']} />
       {walk && <Sky distance={4000} sunPosition={[60, 40, 30]} turbidity={4} rayleigh={1.2} mieCoefficient={0.004} />}
-      {walk && <fog attach="fog" args={['#dbe9f2', 45, 150]} />}
+      {walk && <fog attach="fog" args={['#dbe9f2', 70, 230]} />}
       <hemisphereLight args={['#fffaf0', walk ? '#efe6d6' : '#b7c49f', 1]} />
       {walk && <ambientLight intensity={0.55} color="#fff4e6" />}
-      <directionalLight position={[24, 40, 16]} intensity={1.5} castShadow={!MOBILE} shadow-mapSize={[4096, 4096]}
-        shadow-camera-left={-45} shadow-camera-right={50} shadow-camera-top={34} shadow-camera-bottom={-34} shadow-camera-far={120} shadow-bias={-0.0005} />
+      <directionalLight position={[30, 50, 22]} intensity={1.5} castShadow={!MOBILE} shadow-mapSize={[4096, 4096]}
+        shadow-camera-left={-70} shadow-camera-right={70} shadow-camera-top={60} shadow-camera-bottom={-60} shadow-camera-far={160} shadow-bias={-0.0005} />
       <Bake key={walk ? 'walk' : 'view'}>
-      <Grounds walk={walk} />
-      <Walls full={walk} />
-      <Shell full={walk} tall={TALL} low={LOW} />
-      {walk && (
-        <mesh position={[CX, 2.82, 0]} rotation-x={Math.PI / 2}>
-          <planeGeometry args={[LEN, 2 * BZ]} />
-          <meshStandardMaterial color="#fbf8f2" side={THREE.DoubleSide} />
-        </mesh>
-      )}
+      <City walk={walk} />
       {Object.values(ROOMS).map(r => (
-        <Room key={r.scene.id} room={r} count={count[r.scene.id]} busy={busy[r.scene.id]} island={island}
+        <Room key={r.scene.id} room={r} count={count[r.scene.id]} busy={busy[r.scene.id]}
               mine={mine && mine.scene === r.scene.id} onPick={onPick} viewer={pilot} full={walk} />
       ))}
       </Bake>
@@ -434,8 +374,8 @@ export default function School({ users, meId, focus, fit = 1, nonce = 0, onPick,
       {walk
         ? <FirstPerson pilot={pilot} />
         : <>
-            <OrbitControls makeDefault enableDamping screenSpacePanning={false} minZoom={7} maxZoom={140}
-              minPolarAngle={0.5} maxPolarAngle={1.1} target={[CX + 4, 0, 0]} />
+            <OrbitControls makeDefault enableDamping screenSpacePanning={false} minZoom={4} maxZoom={140}
+              minPolarAngle={0.5} maxPolarAngle={1.1} target={[0, 2, 0]} />
             <Rig focus={focus} fit={fit} nonce={nonce} />
           </>}
     </Canvas>
