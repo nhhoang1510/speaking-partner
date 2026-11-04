@@ -7,7 +7,7 @@ import { useContext, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { B, C, S, paint, rnd } from './props.jsx';
-import { Tree, Car, Bench } from './scenery.jsx';
+import { Many, Tree, Car, Bench } from './scenery.jsx';
 import { Night } from './time.js';
 
 export const LOT = 4.9;
@@ -74,6 +74,179 @@ const Sign = ({ text, bg, fg, p, w = 3, h = 0.5 }) => {
   return <mesh position={p}><planeGeometry args={[w, h]} /><meshStandardMaterial map={map} emissive="#ffffff" emissiveMap={map} emissiveIntensity={0.2} /></mesh>;
 };
 const pick = (r, list) => list[Math.floor(r() * list.length) % list.length];
+
+// ---------------------------------------------------------------- parks, squares and the metro
+function Flowers({ beds, seed }) {
+  // round flowers in three colours over the given beds [x, z, w, d]
+  const out = useMemo(() => {
+    const r = rnd(seed + 3), cols = [[], [], []];
+    beds.forEach(([x, z, w, d]) => { for (let i = 0; i < w * d * 2.2; i++) cols[i % 3].push([x + (r() - 0.5) * w, 0.22, z + (r() - 0.5) * d, 0.8 + r() * 0.5]); });
+    return cols;
+  }, [seed]);
+  return ['#e84a5f', '#ffd166', '#f6f0ff'].map((c, i) => <Many key={c} geo={<sphereGeometry args={[0.12, 6, 5]} />} c={c} cast={false} at={out[i]} />);
+}
+
+// a lake with a red arched bridge out to a little pavilion on an island, a path round it and willows
+function Lake({ seed }) {
+  const r = rnd(seed), bridge = Array.from({ length: 9 }, (_, i) => { const t = i / 8 - 0.5; return [t * 3.2, 0.35 + (0.25 - t * t) * 1.6]; });
+  return (
+    <>
+      <Ground c="#86b867" />
+      <mesh position={[0, 0.075, -0.4]} scale={[1, 1, 0.8]} receiveShadow><cylinderGeometry args={[4.4, 4.4, 0.02, 36]} /><meshStandardMaterial color="#d9cdb4" /></mesh>
+      <mesh position={[0, 0.085, -0.4]} scale={[1, 1, 0.8]}><cylinderGeometry args={[3.7, 3.7, 0.02, 36]} /><meshStandardMaterial color="#4f9fc9" roughness={0.12} metalness={0.2} /></mesh>
+      <C p={[1.2, 0.15, -1.2]} r={0.9} h={0.2} c="#7fb562" seg={16} />
+      <group position={[1.2, 0.25, -1.2]}>
+        {[[-0.4, -0.4], [0.4, -0.4], [-0.4, 0.4], [0.4, 0.4]].map(([a, b]) => <B key={a + ':' + b} p={[a, 0.55, b]} s={[0.1, 1.1, 0.1]} c="#a33b2a" />)}
+        <mesh position={[0, 1.3, 0]} rotation-y={Math.PI / 4} castShadow><coneGeometry args={[0.85, 0.5, 4]} /><meshStandardMaterial color="#6b3a2a" /></mesh>
+        <mesh position={[0, 1.65, 0]} rotation-y={Math.PI / 4} castShadow><coneGeometry args={[0.5, 0.4, 4]} /><meshStandardMaterial color="#6b3a2a" /></mesh>
+      </group>
+      <group position={[-0.8, 0, 0.4]} rotation-y={-0.75}>
+        {bridge.map(([x, y], i) => <B key={i} p={[x, y, 0]} s={[0.42, 0.08, 0.9]} c="#c0392b" />)}
+        {[-0.45, 0.45].map(z => bridge.map(([x, y], i) => i % 2 ? null : <B key={z + ':' + i} p={[x, y + 0.3, z]} s={[0.06, 0.5, 0.06]} c="#c0392b" />))}
+      </group>
+      {[[-4.1, -4.1], [4.1, -4.1], [-4.1, 3.6], [4.2, 3.6]].map(([x, z], i) => <Tree key={i} x={x} z={z} k={0.8 + r() * 0.2} pine={i === 1} />)}
+      <Bench x={-2.8} z={3.7} r={Math.PI} /><Bench x={2.8} z={3.7} r={Math.PI} />
+      <Sign text="HỒ CÔNG VIÊN · LAKE PARK" bg="#2f7a54" p={[0, 0.9, LOT - 0.15]} w={2.6} h={0.4} />
+      <C p={[0, 0.35, LOT - 0.15]} r={0.04} h={0.7} c="#555" />
+    </>
+  );
+}
+
+// a flower garden: hedges round the edge, beds of flowers and a gazebo in the middle
+function Garden({ seed }) {
+  const beds = [[-2.6, -2.6, 2.8, 2.8], [2.6, -2.6, 2.8, 2.8], [-2.6, 2.4, 2.8, 2.4], [2.6, 2.4, 2.8, 2.4]];
+  return (
+    <>
+      <Ground c="#8cc06e" />
+      <B p={[0, 0.085, 0]} s={[2 * LOT, 0.01, 1.2]} c="#e8dcc4" cast={false} />
+      <B p={[0, 0.085, 0]} s={[1.2, 0.01, 2 * LOT]} c="#e8dcc4" cast={false} />
+      {beds.map(([x, z, w, d]) => <B key={x + ':' + z} p={[x, 0.11, z]} s={[w, 0.08, d]} c="#6b4a35" cast={false} />)}
+      <Flowers beds={beds} seed={seed} />
+      {[[0, -LOT + 0.25, 2 * LOT, 0.5], [-LOT + 0.25, 0, 0.5, 2 * LOT], [LOT - 0.25, 0, 0.5, 2 * LOT]].map(([x, z, w, d]) => (
+        <B key={x + ':' + z} p={[x, 0.4, z]} s={[w, 0.7, d]} c="#4f8a43" />
+      ))}
+      <group>
+        <C p={[0, 0.12, 0]} r={1.3} h={0.16} c="#f1ebe0" seg={6} />
+        {Array.from({ length: 6 }, (_, k) => <C key={k} p={[Math.cos(k * 1.047) * 1.1, 1.1, Math.sin(k * 1.047) * 1.1]} r={0.06} h={1.9} c="#ffffff" seg={8} />)}
+        <mesh position={[0, 2.35, 0]} castShadow><coneGeometry args={[1.6, 0.9, 6]} /><meshStandardMaterial color="#3f7a6a" /></mesh>
+      </group>
+      <Bench x={-1.9} z={0} r={Math.PI / 2} /><Bench x={1.9} z={0} r={-Math.PI / 2} />
+    </>
+  );
+}
+
+// a playground: soft ground, a slide, swings, a seesaw, a sandpit and a roundabout
+function Playground({ seed }) {
+  const r = rnd(seed);
+  return (
+    <>
+      <Ground c="#8cc06e" />
+      <B p={[0, 0.09, -0.6]} s={[8.6, 0.02, 7]} c="#e98c5a" cast={false} />
+      <group position={[-2.4, 0, -2.4]}>
+        <B p={[0, 1.2, 0]} s={[1.1, 0.1, 1.1]} c="#2a9d8f" />
+        {[[-0.5, -0.5], [0.5, -0.5], [-0.5, 0.5], [0.5, 0.5]].map(([a, b]) => <C key={a + ':' + b} p={[a, 0.9, b]} r={0.05} h={1.8} c="#264653" seg={8} />)}
+        <mesh position={[0, 1.95, 0]} rotation-y={Math.PI / 4} castShadow><coneGeometry args={[0.95, 0.6, 4]} /><meshStandardMaterial color="#e9c46a" /></mesh>
+        <B p={[1.35, 0.65, 0]} r={0} s={[1.9, 0.06, 0.6]} c="#e84a5f" />
+        {[-0.6, -0.2].map(z => <B key={z} p={[-0.8, 0.6, z]} s={[0.05, 1.2, 0.05]} c="#264653" />)}
+      </group>
+      <group position={[2.2, 0, -2.4]}>
+        <B p={[0, 1.9, 0]} s={[3, 0.1, 0.1]} c="#264653" />
+        {[-1.45, 1.45].flatMap(x => [-0.5, 0.5].map(z => <B key={x + ':' + z} p={[x, 0.95, z * 0.6]} s={[0.08, 1.9, 0.08]} c="#264653" />))}
+        {[-0.6, 0.6].map(x => <group key={x}>
+          {[-0.18, 0.18].map(z => <B key={z} p={[x, 1.3, z]} s={[0.02, 1.2, 0.02]} c="#999" cast={false} />)}
+          <B p={[x, 0.68, 0]} s={[0.5, 0.06, 0.4]} c={x < 0 ? '#e76f51' : '#457b9d'} />
+        </group>)}
+      </group>
+      <group position={[-2.4, 0, 1.4]}>
+        <B p={[0, 0.3, 0]} s={[0.15, 0.5, 0.15]} c="#264653" />
+        <B p={[0, 0.58, 0]} r={0} s={[2.6, 0.08, 0.3]} c="#f4a261" />
+      </group>
+      <B p={[2.2, 0.12, 1.4]} s={[2.4, 0.12, 2.2]} c="#e9d8a6" />
+      <B p={[2.2, 0.16, 1.4]} s={[2.2, 0.06, 2]} c="#f2e3b6" cast={false} />
+      <C p={[0, 0.25, 0.2]} r={0.9} h={0.12} c="#e9c46a" seg={16} />
+      <C p={[0, 0.6, 0.2]} r={0.05} h={0.6} c="#264653" seg={8} />
+      <Tree x={-4.1} z={4} k={0.8} /><Tree x={4.1} z={4} k={0.75 + r() * 0.1} /><Bench x={0} z={3.9} r={Math.PI} />
+    </>
+  );
+}
+
+// courts: a basketball court with hoops, and a badminton court beside it, fenced
+function Courts() {
+  return (
+    <>
+      <Ground c="#6f9a5c" />
+      <B p={[0, 0.09, -1.4]} s={[9.2, 0.02, 5.6]} c="#3d6fa8" cast={false} />
+      <B p={[0, 0.1, -1.4]} s={[7.6, 0.01, 4.4]} c="#d9824b" cast={false} />
+      <B p={[0, 0.105, -1.4]} s={[0.06, 0.01, 4.4]} c="#ffffff" cast={false} />
+      <C p={[0, 0.105, -1.4]} r={0.7} h={0.005} c="#ffffff" seg={20} />
+      {[-1, 1].map(k => <group key={k} position={[k * 4.1, 0, -1.4]} rotation-y={k > 0 ? -Math.PI / 2 : Math.PI / 2}>
+        <C p={[0, 1.4, -0.3]} r={0.07} h={2.8} c="#444" seg={8} />
+        <B p={[0, 2.8, 0]} s={[1.2, 0.8, 0.06]} c="#ffffff" />
+        <mesh position={[0, 2.55, 0.3]} rotation-x={Math.PI / 2}><torusGeometry args={[0.22, 0.025, 6, 16]} /><meshStandardMaterial color="#e05a2a" /></mesh>
+      </group>)}
+      <B p={[0, 0.09, 3.1]} s={[6, 0.02, 2.6]} c="#2f8a5a" cast={false} />
+      <B p={[0, 0.55, 3.1]} s={[0.04, 0.9, 2.6]} c="#eeeeee" cast={false} />
+      {[[0, -4.3, 9.4, 0.05], [-4.7, -1.4, 0.05, 5.8], [4.7, -1.4, 0.05, 5.8]].map(([x, z, w, d]) => <B key={x + ':' + z} p={[x, 1, z]} s={[w, 2, d]} c="#7a8a92" o={0.35} cast={false} />)}
+    </>
+  );
+}
+
+// a square: paving, a statue on a tall plinth, two flagpoles, fountains in long pools and benches
+function Plaza() {
+  return (
+    <>
+      <Ground c="#e5dccb" />
+      <C p={[0, 0.3, -0.5]} r={1.4} h={0.5} c="#bdb3a3" seg={8} />
+      <B p={[0, 1.4, -0.5]} s={[1.1, 1.8, 1.1]} c="#9a9183" />
+      <group position={[0, 2.3, -0.5]}>
+        <C p={[0, 0.75, 0]} r={0.28} r2={0.36} h={1.5} c="#6f7b72" seg={10} metal={0.5} rough={0.4} />
+        <S p={[0, 1.75, 0]} r={0.26} c="#6f7b72" />
+        <B p={[0.35, 1.35, 0.1]} r={0.4} s={[0.16, 0.9, 0.16]} c="#6f7b72" />
+      </group>
+      {[-3, 3].map(x => <group key={x}>
+        <B p={[x, 0.15, -0.5]} s={[1.6, 0.3, 6]} c="#cfc6b5" />
+        <B p={[x, 0.31, -0.5]} s={[1.3, 0.02, 5.7]} c="#5fb3d6" rough={0.1} cast={false} />
+        {[-2, 0, 2].map(z => <mesh key={z} position={[x, 0.7, -0.5 + z]}><coneGeometry args={[0.18, 0.8, 8, 1, true]} /><meshStandardMaterial color="#bfe8fa" transparent opacity={0.5} depthWrite={false} /></mesh>)}
+      </group>)}
+      {[-1.6, 1.6].map(x => <group key={x}>
+        <C p={[x, 2.5, -4.2]} r={0.05} h={5} c="#d9d9d9" seg={8} metal={0.6} />
+        <Sign text="★" bg="#da251d" fg="#ffde00" p={[x + 0.6, 4.5, -4.2]} w={1.2} h={0.8} />
+      </group>)}
+      <Bench x={-1.6} z={3.6} r={Math.PI} /><Bench x={1.6} z={3.6} r={Math.PI} />
+      <Sign text="QUẢNG TRƯỜNG" bg="#7a2e3a" p={[0, 1.2, 0.07]} w={1.05} h={0.3} />
+    </>
+  );
+}
+
+// a metro station: the ticket hall's glass pavilion, two stair entrances down under glass canopies, and a
+// tall M sign
+function Metro() {
+  const steps = useMemo(() => stripes('#3a3f45', '#5b636b'), []);
+  const mark = useMemo(() => paint('metro-m', 128, 128, (g, w, h) => {
+    g.fillStyle = '#d62828'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#fff'; g.font = '900 92px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('M', w / 2, h / 2 + 6);
+  }, [1, 1]), []);
+  return (
+    <>
+      <Ground c="#d8d2c6" />
+      <Block p={[0, 0, -2.6]} s={[7, 3.2, 3.6]} wall="#2f3a46" glass="#9fd3ef" strip roof="#c9ced3" />
+      <Sign text="METRO · GA TÀU ĐIỆN NGẦM" bg="#d62828" p={[0, 2.7, -0.78]} w={4.6} h={0.55} />
+      {[-2.6, 2.6].map(x => <group key={x} position={[x, 0, 1.8]}>
+        <mesh position={[0, 0.082, 0]} rotation-x={-Math.PI / 2}><planeGeometry args={[1.6, 2.6]} /><meshStandardMaterial map={steps} color="#ffffff" /></mesh>
+        {[-0.85, 0.85].map(k => <B key={k} p={[k, 0.5, 0]} s={[0.08, 1, 2.6]} c="#9aa3ab" metal={0.5} />)}
+        {[[-0.9, -1.3], [0.9, -1.3], [-0.9, 1.3], [0.9, 1.3]].map(([a, b]) => <B key={a + ':' + b} p={[a, 1.25, b]} s={[0.08, 2.5, 0.08]} c="#3a3f45" />)}
+        <B p={[0, 2.55, 0]} s={[2, 0.08, 2.9]} c="#bfe3f5" o={0.55} rough={0.1} />
+      </group>)}
+      <group position={[0, 0, 3.6]}>
+        <C p={[0, 1.6, 0]} r={0.09} h={3.2} c="#3a3f45" seg={8} />
+        <C p={[0, 3.5, 0]} r={0.55} h={0.12} rx={Math.PI / 2} c="#d62828" seg={20} />
+        {[1, -1].map(k => <mesh key={k} position={[0, 3.5, k * 0.07]} rotation-y={k < 0 ? Math.PI : 0}><circleGeometry args={[0.5, 24]} /><meshStandardMaterial map={mark} emissive="#ffffff" emissiveMap={mark} emissiveIntensity={0.2} /></mesh>)}
+      </group>
+      {[-4, 4].map(x => <Tree key={x} x={x} z={-4.1} k={0.7} />)}
+      {[-0.6, 0, 0.6].map(x => <B key={x} p={[x, 0.35, 0.6]} s={[0.05, 0.6, 0.6]} c="#888" metal={0.5} />)}
+    </>
+  );
+}
 
 // ---------------------------------------------------------------- the kinds
 function Tower({ seed }) {
@@ -227,16 +400,28 @@ function Hospital() {
   );
 }
 
+// a shopping centre: a wide glass podium with a tower behind, a glass atrium over the entrance, banners and
+// a little forecourt with planters
 function Mall() {
   return (
     <>
-      <Block p={[0, 0, -0.8]} s={[9.8, 7, 8]} wall="#e9e4dc" glass="#6aa0c8" strip />
-      <B p={[0, 1.4, 3.5]} s={[5, 2.8, 0.6]} c="#bfe3f5" o={0.55} />
-      <Sign text="CITY MALL" bg="#8e44ad" p={[0, 5.6, 3.25]} w={5} h={1} />
+      <Ground c="#d9d2c4" />
+      <Block p={[0, 0, -2.6]} s={[6.4, 15, 4.2]} wall="#3d4f63" glass="#6aa0c8" strip />
+      <Block p={[0, 0, -0.6]} s={[9.8, 6.4, 7.4]} wall="#ece6dc" glass="#7fb2d6" strip />
+      <B p={[0, 3.3, 3.25]} s={[4.6, 6.4, 0.8]} c="#bfe3f5" o={0.5} rough={0.1} />
+      <mesh position={[0, 6.5, 3]} rotation-x={Math.PI / 2} castShadow>
+        <cylinderGeometry args={[2.3, 2.3, 1.4, 20, 1, false, 0, Math.PI]} /><meshStandardMaterial color="#9fd3ef" transparent opacity={0.55} roughness={0.1} side={THREE.DoubleSide} />
+      </mesh>
+      <B p={[0, 2.6, 4.05]} s={[5.4, 0.15, 1.4]} c="#f4f1ea" />
+      {[-4.2, 4.2].map(x => <B key={x} p={[x, 4.2, 3.12]} s={[0.9, 3.4, 0.05]} c={x < 0 ? '#e84a5f' : '#2a9d8f'} cast={false} />)}
+      <Sign text="SKY MALL · TRUNG TÂM THƯƠNG MẠI" bg="#8e44ad" p={[0, 5.2, 3.68]} w={4.4} h={0.7} />
+      <Sign text="SKY MALL" bg="#e84a5f" p={[0, 14, -0.47]} w={4.6} h={1.2} />
+      {[-3.4, 3.4].map(x => <group key={x} position={[x, 0, 4.1]}>
+        <B p={[0, 0.3, 0]} s={[1.4, 0.6, 0.8]} c="#cfc8bc" /><Tree x={0} z={0} k={0.55} />
+      </group>)}
     </>
   );
 }
-
 function Station() {
   return (
     <>
@@ -303,7 +488,13 @@ export const KINDS = {
   pitch: { draw: Pitch, solid: [] },
   market: { draw: Market, solid: [] },
   hospital: { draw: Hospital, solid: [[0, -1, 10, 7], [0, 3.3, 4, 2.2]] },
-  mall: { draw: Mall, solid: [[0, -0.8, 9.8, 8]] },
+  mall: { draw: Mall, solid: [[0, -0.6, 9.8, 7.4], [0, 3.25, 4.6, 0.8]] },
+  lake: { draw: Lake, solid: [[0, -0.4, 7, 5.6]] },
+  garden: { draw: Garden, solid: [[-2.6, -2.6, 2.8, 2.8], [2.6, -2.6, 2.8, 2.8], [-2.6, 2.4, 2.8, 2.4], [2.6, 2.4, 2.8, 2.4], [0, 0, 2.6, 2.6]] },
+  playground: { draw: Playground, solid: [[-2.4, -2.4, 1.4, 1.4], [2.2, -2.4, 3.2, 0.8]] },
+  courts: { draw: Courts, solid: [] },
+  plaza: { draw: Plaza, solid: [[0, -0.5, 2.8, 2.8], [-3, -0.5, 1.6, 6], [3, -0.5, 1.6, 6]] },
+  metro: { draw: Metro, solid: [[0, -2.6, 7, 3.6], [-2.6, 1.8, 1.8, 2.8], [2.6, 1.8, 1.8, 2.8]] },
   station: { draw: Station, solid: [[0, 0, 9.8, 6]] },
   school: { draw: School, solid: [[0, -1, 10.5, 6.5], [0, 2.6, 3, 1.2]] },
   parking: { draw: Parking, solid: CARS5 },

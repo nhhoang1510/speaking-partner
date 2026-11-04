@@ -16,16 +16,19 @@ import { Many, Tree, Car, Lamp, tex } from './scenery.jsx';
 import { KINDS, Block, signTexture, stripes } from './blocks.jsx';
 import { Bake } from './bake.jsx';
 import { Outskirts } from './outskirts.jsx';
+import { Highway, blockedHighway } from './highway.jsx';
+
+const FAR = 260;                                             // the countryside reaches this far out
 
 const LAYOUT = [
-  ['houses', 'houses', 'pitch', 'offices', 'station', 'offices', 'shops', 'houses', 'houses'],
+  ['houses', 'garden', 'pitch', 'offices', 'station', 'offices', 'shops', 'houses', 'houses'],
   ['houses', 'park', 'flats', 'tower', 'mall', 'tower', 'flats', 'hospital', 'houses'],
-  ['shops', 'flats', 'tower', 'flats', 'school', 'tower', 'flats', 'offices', 'shops'],
+  ['metro', 'flats', 'tower', 'flats', 'school', 'tower', 'flats', 'offices', 'shops'],
   ['houses', 'offices', 'interview', 'accounting', 'finance', 'tax', 'bank', 'market', 'houses'],
-  ['houses', 'shops', 'hotel', 'airport', 'park', 'doctor', 'shop', 'houses', 'houses'],
-  ['houses', 'flats', 'friend', 'coffee', 'parking', 'free', 'fuel', 'shops', 'houses'],
-  ['houses', 'park', 'shops', 'market', 'pitch', 'shops', 'houses', 'park', 'houses'],
-  ['houses', 'houses', 'houses', 'houses', 'shops', 'houses', 'houses', 'houses', 'houses'],
+  ['houses', 'shops', 'hotel', 'airport', 'metro', 'doctor', 'shop', 'playground', 'houses'],
+  ['houses', 'flats', 'friend', 'coffee', 'plaza', 'free', 'fuel', 'shops', 'houses'],
+  ['houses', 'lake', 'shops', 'market', 'courts', 'shops', 'houses', 'park', 'houses'],
+  ['houses', 'garden', 'houses', 'houses', 'parking', 'playground', 'lake', 'houses', 'houses'],
 ];
 
 export const P = 20, BLK = 13, ROAD = P - BLK, NC = LAYOUT[0].length, NR = LAYOUT.length;
@@ -148,6 +151,7 @@ export function blockedCity(x, z) {
     }
     return ((KINDS[L.id] && KINDS[L.id].solid) || []).some(([a, b, w, d]) => Math.abs(dx - a) < w / 2 + 0.2 && Math.abs(dz - b) < d / 2 + 0.2);
   }
+  if (blockedHighway(x, z, EDGE_X, EDGE_Z, FAR)) return true;
   return PARKED.some(([a, b, r]) => Math.abs(x - a) < (r ? 2.3 : 1.15) && Math.abs(z - b) < (r ? 1.15 : 2.3));
 }
 
@@ -187,7 +191,7 @@ function Streets() {
     CELLS.forEach(({ id, x, z }) => {
       const kerb = BLK / 2 - 0.4;                                                    // along the kerb, clear of the walkers
       [-4.2, 4.2].forEach(dx => out.push({ x: x + dx, z: z + kerb }));
-      if (['park', 'pitch', 'houses', 'market', 'tower', 'flats'].includes(id)) return;
+      if (['park', 'pitch', 'houses', 'market', 'tower', 'flats', 'lake', 'garden', 'playground', 'courts', 'plaza'].includes(id)) return;
       [-1, 1].forEach(k => out.push({ x: x + k * kerb, z: z - 3 }));
     });
     return out.map((t, i) => ({ ...t, k: 0.62, pine: i % 4 === 3 }));
@@ -264,12 +268,57 @@ function Traffic() {
   ));
 }
 
+// ---------------------------------------------------------------- people out and about
+// townsfolk strolling round the blocks on the pavement, some each way; each one is a few baked pieces, with
+// two legs that swing, so a crowd costs little to draw
+const FOLK_SHIRTS = ['#e76f51', '#2a9d8f', '#e9c46a', '#264653', '#f4a261', '#8ab17d', '#b56576', '#6d597a', '#457b9d', '#f1faee'];
+const FOLK_SKIN = ['#f3d2b3', '#e8b98f', '#d7a274', '#b07850', '#8d5a3b'];
+const FOLK = Array.from({ length: 22 }, (_, i) => {
+  const r = rnd(i * 97 + 5), cell = CELLS[Math.floor(r() * CELLS.length)], side = SIDE + (r() < 0.5 ? -0.45 : 0.45);
+  const pts = [[cell.x - side, cell.z - side], [cell.x + side, cell.z - side], [cell.x + side, cell.z + side], [cell.x - side, cell.z + side]];
+  return { pts: r() < 0.5 ? pts : pts.reverse(), off: r(), speed: 1.1 + r() * 0.5, shirt: FOLK_SHIRTS[i % FOLK_SHIRTS.length],
+           skin: FOLK_SKIN[Math.floor(r() * FOLK_SKIN.length)], pants: r() < 0.5 ? '#2f3e5c' : '#3b3b3b', tall: 0.92 + r() * 0.14,
+           bag: r() < 0.3, hair: ['#2b1d14', '#4a3426', '#1c1c1c', '#c8a15a'][Math.floor(r() * 4)] };
+});
+function Folk({ f }) {
+  const g = useRef(), legL = useRef(), legR = useRef();
+  const len = 8 * SIDE;
+  useFrame(({ clock }) => {
+    if (!g.current) return;
+    const t = clock.elapsedTime;
+    let s = ((t * f.speed / len + f.off) % 1) * 4;
+    const k = Math.floor(s), u = s - k, a = f.pts[k], b = f.pts[(k + 1) % 4];
+    g.current.position.set(a[0] + (b[0] - a[0]) * u, Math.abs(Math.sin(t * 7 * f.speed)) * 0.03, a[1] + (b[1] - a[1]) * u);
+    g.current.rotation.y = Math.atan2(b[0] - a[0], b[1] - a[1]);
+    const sw = Math.sin(t * 7 * f.speed) * 0.5;
+    legL.current.rotation.x = sw; legR.current.rotation.x = -sw;
+  });
+  return (
+    <group ref={g} scale={f.tall} userData={{ live: true }}>
+      {[[-0.09, legL], [0.09, legR]].map(([x, ref]) => (
+        <group key={x} ref={ref} position={[x, 0.85, 0]} userData={{ joint: true }}>
+          <mesh position={[0, -0.42, 0]} castShadow><boxGeometry args={[0.13, 0.85, 0.15]} /><meshStandardMaterial color={f.pants} /></mesh>
+        </group>
+      ))}
+      <Bake>
+        <B p={[0, 1.18, 0]} s={[0.4, 0.62, 0.24]} c={f.shirt} />
+        {[-0.25, 0.25].map(x => <B key={x} p={[x, 1.15, 0]} s={[0.1, 0.55, 0.12]} c={f.shirt} />)}
+        <B p={[0, 1.66, 0]} s={[0.26, 0.28, 0.26]} c={f.skin} />
+        <B p={[0, 1.83, -0.02]} s={[0.28, 0.08, 0.3]} c={f.hair} />
+        {f.bag && <B p={[0, 1.2, -0.18]} s={[0.3, 0.38, 0.12]} c="#5a4a3a" />}
+      </Bake>
+    </group>
+  );
+}
+
 // ---------------------------------------------------------------- the whole town
 export function City({ walk }) {
   return (
     <group>
       <Outskirts edgeX={EDGE_X} edgeZ={EDGE_Z} roadsX={ROADS_X} roadsZ={ROADS_Z} road={ROAD} walk={walk} />
       <Streets />
+      <Highway edgeX={EDGE_X} edgeZ={EDGE_Z} far={FAR} />
+      {FOLK.map((f, i) => <Folk key={i} f={f} />)}
       {CELLS.filter(L => !LOOK[L.id] && KINDS[L.id]).map(L => {
         const Kind = KINDS[L.id].draw;
         return <group key={L.r + ':' + L.c} position={[L.x, 0, L.z]}><Kind seed={L.seed} /></group>;
