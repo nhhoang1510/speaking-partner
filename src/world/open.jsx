@@ -1,18 +1,31 @@
-// The inside of the school as one open hall: no walls between the practice areas. Each area is a rounded
-// island of its own floor with a coloured rim, half wrapped at the back by a low curved screen of slats, and
-// they all open onto a winding promenade that runs from the front door to the far end. Round columns with
-// planter benches and potted trees stand between the areas.
+// The inside of the school as one wide open hall: no walls between the practice areas. Each area is a rounded
+// island of its own floor with a coloured rim, half wrapped at the back by a low curved screen of slats. The
+// areas are scattered loosely in three staggered bands, each turned its own way, with room to breathe between
+// them; two winding walks run the length of the hall from the front door, joined by three cross walks, and
+// columns with planter benches and potted trees stand in the gaps.
 import { useMemo } from 'react';
 import * as THREE from 'three';
 import { B, C, S, Plant, Pendant, floorTexture } from './props.jsx';
-import { Many, COLS, X0, BX } from './campus.jsx';
+import { Many, X0, BX } from './campus.jsx';
 
-export const ZA = 3.4, ZB = 3.65, ZR = 1.5, ZC = 5.1;    // area half width / half depth / corner radius; its centre is at |z| = ZC
+export const ZA = 3.4, ZB = 3.65, ZR = 1.5;              // area half width / half depth / corner radius
 const OPEN = -1.2;                                         // the screen wraps the back, up to this local z
-export const pathZ = x => 0.4 * Math.sin((x - X0) * Math.PI / 7);   // the promenade's centre line
-const PATH_W = 1.15;
-export const COLUMNS = Array.from({ length: COLS - 1 }, (_, k) => X0 + 7 * (k + 1)).flatMap(x => [[x, -1.95], [x, 1.95]]);
-const POTS = Array.from({ length: COLS - 1 }, (_, k) => X0 + 7 * (k + 1)).flatMap(x => [[x, -8.3], [x, 8.3]]);
+// where each area stands and which way it faces (rot 0: open side towards +z); in the order of the scenes
+export const PLACES = [
+  [7, -10.6, 0.12], [-3.5, -10.6, -0.1], [-14, -10.4, 0.18], [-24.5, -10.8, -0.12],
+  [8, 10.6, 3.0], [-2.5, 10.55, 3.25], [-13.5, 10.4, 3.05], [-25, 10.7, 3.3],
+  [2, 0.3, 3.4], [-8.5, -0.2, -0.25], [-19.5, 0.3, 3.0], [-28.8, -0.2, 0.1],
+];
+// the two long walks (side -1 north, +1 south), meeting at the front door; and the cross walks between them
+const WALK_W = 1.1;
+export function walkZ(side, x) {
+  const t = Math.max(0, Math.min(1, (x - 4) / (BX - 4))), e = t * t * (3 - 2 * t);
+  return side * (5.3 + 0.3 * Math.sin(x * 0.45 + side)) * (1 - e);
+}
+export const CROSS = [-3.25, -14, -24.15];
+const gaps = (xs, z) => xs.map(x => [x, z]);
+export const COLUMNS = [...gaps([1.75, -8.75, -19.25], -8.3), ...gaps([2.75, -8, -19.25], 8.3)];
+const POTS = [...gaps([1.75, -8.75, -19.25, -30.5, 12.3], -12.6), ...gaps([2.75, -8, -19.25, -30.5, 12.3], 12.6)];
 
 // signed distance to an area's rounded outline (local coordinates; negative inside)
 function outline(x, z, a = ZA, b = ZB, r = ZR) {
@@ -91,10 +104,10 @@ export function Area({ accent, wall, h, full }) {
   );
 }
 
-// a band of width 2*hw following the promenade (from x0 to x1), lying on the floor
-function bandGeometry(x0, x1, off, hw) {
+// a band of width 2*hw following one long walk (from x0 to x1), lying on the floor
+function bandGeometry(side, x0, x1, off, hw) {
   const top = [], bot = [];
-  for (let x = x0; x <= x1 + 1e-6; x += 0.5) { const z = pathZ(x) + off; top.push([x, -(z - hw)]); bot.push([x, -(z + hw)]); }
+  for (let x = x0; x <= x1 + 1e-6; x += 0.5) { const z = walkZ(side, x) + off; top.push([x, -(z - hw)]); bot.push([x, -(z + hw)]); }
   const s = new THREE.Shape();
   s.moveTo(...top[0]); top.slice(1).forEach(p => s.lineTo(...p));
   bot.reverse().forEach(p => s.lineTo(...p));
@@ -102,17 +115,32 @@ function bandGeometry(x0, x1, off, hw) {
 }
 
 export function Promenade({ full }) {
-  const x0 = X0 + 0.15, x1 = BX + 0.2;
-  const geo = useMemo(() => ({
-    path: bandGeometry(x0, x1, 0, PATH_W), edgeA: bandGeometry(x0, x1, -PATH_W, 0.05), edgeB: bandGeometry(x0, x1, PATH_W, 0.05),
-  }), []);
+  const x0 = X0 + 0.8, x1 = BX + 0.2;
+  const geo = useMemo(() => [-1, 1].map(side => ({
+    walk: bandGeometry(side, x0, x1, 0, WALK_W), a: bandGeometry(side, x0, x1, -WALK_W, 0.05), b: bandGeometry(side, x0, x1, WALK_W, 0.05),
+  })), []);
   const map = useMemo(() => floorTexture('hall', [0.5, 0.5]), []);
+  const crossMap = useMemo(() => floorTexture('hall', [1, 4.5]), []);
+  const brass = <meshStandardMaterial color="#c9a66b" metalness={0.4} roughness={0.35} />;
   const flat = (g, y, mat, key) => <mesh key={key} geometry={g} rotation-x={-Math.PI / 2} position={[0, y, 0]} receiveShadow>{mat}</mesh>;
   return (
     <group>
-      {flat(geo.path, 0.015, <meshStandardMaterial map={map} roughness={0.35} />)}
-      {flat(geo.edgeA, 0.018, <meshStandardMaterial color="#c9a66b" metalness={0.4} roughness={0.35} />, 'a')}
-      {flat(geo.edgeB, 0.018, <meshStandardMaterial color="#c9a66b" metalness={0.4} roughness={0.35} />, 'b')}
+      {geo.map((g, i) => <group key={i}>
+        {flat(g.walk, 0.015, <meshStandardMaterial map={map} roughness={0.35} />)}
+        {flat(g.a, 0.018, brass, 'a')}{flat(g.b, 0.018, brass, 'b')}
+      </group>)}
+      {CROSS.map(x => {
+        const z0 = walkZ(-1, x), z1 = walkZ(1, x);
+        return (
+          <mesh key={x} rotation-x={-Math.PI / 2} position={[x, 0.014, (z0 + z1) / 2]} receiveShadow>
+            <planeGeometry args={[2, z1 - z0]} /><meshStandardMaterial map={crossMap} roughness={0.35} />
+          </mesh>
+        );
+      })}
+      {/* a brass compass rose in the floor of the entrance */}
+      <C p={[9.6, 0.012, 0]} r={1.7} h={0.01} c="#c9a66b" seg={40} metal={0.4} rough={0.35} />
+      <C p={[9.6, 0.017, 0]} r={1.55} h={0.01} c="#f1e9da" seg={40} />
+      {[0, 1, 2, 3].map(k => <B key={k} p={[9.6, 0.02, 0]} r={k * Math.PI / 4} s={[2.6, 0.01, 0.12]} c={k % 2 ? '#8a6648' : '#c9a66b'} cast={false} />)}
       {/* columns rising out of round planter benches; from above the near ones are cut low */}
       {COLUMNS.map(([x, z]) => {
         const h = full ? 2.8 : z < 0 ? 2.4 : 0.9;
@@ -127,9 +155,9 @@ export function Promenade({ full }) {
         );
       })}
       {POTS.map(([x, z]) => <Plant key={x + ':' + z} p={[x, 0, z]} s={1.25} pot="#d9cdb9" />)}
-      {full && Array.from({ length: 11 }, (_, k) => X0 + 2 + k * 3.8).map(x => <Pendant key={x} p={[x, 2.6, pathZ(x)]} c="#e9e2d6" />)}
-      {/* a skylight over the promenade */}
-      {full && <B p={[(X0 + BX) / 2, 2.79, 0]} s={[BX - X0 - 3, 0.02, 1.4]} c="#f2fbff" e="#e6f6ff" ei={1} cast={false} />}
+      {full && [-1, 1].flatMap(side => Array.from({ length: 11 }, (_, k) => X0 + 3 + k * 4.2).map(x => <Pendant key={side + ':' + x} p={[x, 2.6, walkZ(side, x)]} c="#e9e2d6" />))}
+      {/* skylights over the long walks */}
+      {full && [-1, 1].map(side => <B key={side} p={[(X0 + BX) / 2 - 2, 2.79, side * 5.3]} s={[BX - X0 - 10, 0.02, 1.4]} c="#f2fbff" e="#e6f6ff" ei={1} cast={false} />)}
     </group>
   );
 }
