@@ -10,7 +10,6 @@ import { today, loadDone, saveDone, said, note } from './lib/challenge.js';
 
 // the whole app is the 3D school; panels float around it
 const School = lazy(() => import('./School.jsx'));
-const MiniMap = lazy(() => import('./MiniMap.jsx'));
 
 const LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname);
 // the AI is chosen by where the page runs, not by the user: the deployed site uses the cloud,
@@ -23,7 +22,7 @@ const STATUS = {
   listening: sc => `Đang nói với ${sc.name}`, thinking: sc => `${sc.name} đang nghĩ`, speaking: sc => `Đang nghe ${sc.name} nói`,
   summary: () => 'Đang xem nhận xét', idle: sc => `Đang luyện ${sc.title}`,
 };
-const describe = u => { const sc = u.scene && SCENE[u.scene]; return sc ? (STATUS[u.phase] || STATUS.idle)(sc) : 'Đang dạo phố'; };
+const describe = u => { const sc = u.scene && SCENE[u.scene]; return sc ? (STATUS[u.phase] || STATUS.idle)(sc) : 'Đang ở hành lang'; };
 const hhmm = t => new Date(t).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
 
 function loadSettings() {
@@ -51,7 +50,7 @@ function events(prev, users, meId) {
     if (!p) { out.push({ t: now, c: u.color, text: `${who(u)} vào trường` }); if (!u.scene) continue; }
     if (!p || p.scene !== u.scene) {
       if (u.scene) out.push({ t: now, c: u.color, text: `${who(u)} vào phòng ${SCENE[u.scene] ? SCENE[u.scene].title : ''}` });
-      else if (p) out.push({ t: now, c: u.color, text: `${who(u)} ra phố` });
+      else if (p) out.push({ t: now, c: u.color, text: `${who(u)} ra hành lang` });
     }
     // a finished sentence: the learner stopped talking and the AI started thinking
     if (p && p.phase === 'listening' && u.phase !== 'listening' && u.said) out.push({ t: now, c: u.color, text: `${who(u)}: “${u.said}”`, said: true });
@@ -89,7 +88,6 @@ export default function App() {
   const [walkRoom, setWalkRoom] = useState(null);      // the room I'm standing in while walking
   const stick = useRef({});                            // the on-screen joystick, read by the 3D scene
   const pos = useRef({ x: 0, z: 0 });
-  const track = useRef(null);                          // my walking state in the 3D view, for the map
   const listenerRef = useRef(null);
   if (!listenerRef.current) listenerRef.current = new Listener();
   const listener = listenerRef.current;
@@ -220,7 +218,7 @@ export default function App() {
       <div className="world" aria-label="Sơ đồ trường học">
         <Suspense fallback={null}>
           <School users={users} meId={meLocal.id} stars={prog.room} sky={cfg.sky} rain={cfg.rain} focus={s.scene ? s.scene.id : null} fit={view.fit} nonce={view.n} onPick={pick}
-            walk={walk} input={stick.current} onMove={onMove} onRoom={onRoom} track={track} />
+            walk={walk} input={stick.current} onMove={onMove} onRoom={onRoom} />
         </Suspense>
       </div>
       <AnimatePresence>{booting && <Preloader key="pre" />}</AnimatePresence>
@@ -245,7 +243,6 @@ export default function App() {
             : <Session x={right} onBack={() => setRight('history')} onAgain={() => pick(SCENE[right.scene])} />}
         </aside>
 
-        {walk && <Suspense fallback={null}><MiniMap track={track} onGo={id => { if (track.current) track.current.goto = id; }} /></Suspense>}
         <div className="bottom">
           {walk && <Stick input={stick.current} />}
           {walk && <div className="look-tip touch-only">Kéo nút tròn lên/xuống để đi, sang trái/phải để quay · hoặc vuốt màn hình để nhìn quanh</div>}
@@ -762,13 +759,13 @@ function Settings({ cfg, set, onClose }) {
         <input id="pause" type="range" min="0.8" max="3" step="0.1" value={cfg.pause} onChange={e => set({ pause: Number(e.target.value) })} />
 
         <label className="switch"><input type="checkbox" checked={cfg.showAi} onChange={e => set({ showAi: e.target.checked })} /><span />Hiện chữ của AI <small>tắt để luyện nghe</small></label>
-        <div className="lbl">Thành phố</div>
+        <div className="lbl">Ngày hay đêm</div>
         <div className="sky-pick" role="radiogroup" aria-label="Ngày hay đêm">
           {[['auto', 'Theo giờ thật'], ['day', 'Ban ngày'], ['night', 'Ban đêm']].map(([k, label]) => (
             <button key={k} role="radio" aria-checked={cfg.sky === k} className={cfg.sky === k ? 'on' : ''} onClick={() => set({ sky: k })}>{label}</button>
           ))}
         </div>
-        <label className="switch"><input type="checkbox" checked={cfg.rain} onChange={e => set({ rain: e.target.checked })} /><span />Trời mưa <small>khi hoá thân dạo phố</small></label>
+        <label className="switch"><input type="checkbox" checked={cfg.rain} onChange={e => set({ rain: e.target.checked })} /><span />Trời mưa <small>khi hoá thân đi dạo</small></label>
         <label className="switch"><input type="checkbox" checked={cfg.feedback} onChange={e => set({ feedback: e.target.checked })} /><span />Sửa câu của tôi</label>
 
       </motion.aside>
