@@ -8,17 +8,16 @@ import { SCENES } from './scenes.js';
 
 const SCENE = Object.fromEntries(SCENES.map(s => [s.id, s]));
 const GROUND = {
-  park: '#9fcf86', pitch: '#7fbf6a', houses: '#e9d9bf', shops: '#f0c9a8', market: '#f2d58c', offices: '#c9d3de', flats: '#d7d0c4',
-  tower: '#aebccb', hospital: '#f4f4f4', mall: '#e4c9e8', station: '#e6c39a', school: '#f3e3a3', parking: '#c4c7cb', fuel: '#f2b8a8',
-  lake: '#8fc7d9', garden: '#b9dd8f', playground: '#f3b38a', courts: '#8fb0d6', plaza: '#e8dcc4', metro: '#e98a8a',
-  bund: '#e6d6a8', nanjing: '#f29b8a', yuyuan: '#c9a77a', shikumen: '#b9b2a6',
+  bund: '#e6d6a8', nanjing: '#f29b8a', dept: '#e8b4a0', shops: '#f0c9a8', museum: '#d9cdb2', theatre: '#cfe3ef', square: '#e8dcc4',
+  park: '#8fc7a0', fuxing: '#a9d48c', jingan: '#f0cf6a', villas: '#c9a08a', wukang: '#b5705c', shikumen: '#b9b2a6', xintiandi: '#c7b9a3',
+  oldcity: '#c98f7a', yuyuan: '#c9a77a', tower: '#aebccb', flats: '#d7d0c4', offices: '#c9d3de', metro: '#e98a8a',
 };
 const NAMES = {
-  houses: 'Biệt thự cổ', shops: 'Phố cửa hàng', offices: 'Khu văn phòng', flats: 'Chung cư', tower: 'Cao ốc', park: 'Công viên',
-  pitch: 'Sân bóng đá', market: 'Chợ phiên', hospital: 'Bệnh viện', mall: 'Trung tâm thương mại', station: 'Ga Thượng Hải',
-  school: 'Trường THPT Nguyễn Thái Học', parking: 'Bãi đỗ xe', fuel: 'Cây xăng', lake: 'Công viên hồ', garden: 'Vườn hoa',
-  playground: 'Sân chơi trẻ em', courts: 'Sân bóng rổ', plaza: 'Quảng trường', metro: 'Ga tàu điện ngầm', bund: 'Bến Thượng Hải',
-  nanjing: 'Phố đi bộ Nam Kinh', yuyuan: 'Dự Viên', shikumen: 'Ngõ Thạch Khố Môn',
+  bund: 'Bến Thượng Hải', nanjing: 'Phố đi bộ Nam Kinh', dept: 'Bách hóa Nam Kinh', shops: 'Phố cửa hàng', museum: 'Bảo tàng Thượng Hải',
+  theatre: 'Nhà hát lớn Thượng Hải', square: 'Quảng trường Nhân Dân', park: 'Công viên Nhân Dân', fuxing: 'Công viên Phục Hưng',
+  jingan: 'Chùa Tĩnh An', villas: 'Biệt thự cổ (Tô giới Pháp)', wukang: 'Tòa nhà Vũ Khang', shikumen: 'Ngõ Thạch Khố Môn',
+  xintiandi: 'Tân Thiên Địa', oldcity: 'Miếu Thành Hoàng', yuyuan: 'Dự Viên', tower: 'Cao ốc', flats: 'Chung cư cũ', offices: 'Khu văn phòng',
+  metro: 'Ga tàu điện ngầm',
 };
 const L = layout(EDGE_X, EDGE_Z, FAR);
 const PUDONG = fillOf(L, ROAD).out.map(([x, z]) => [x, z, 9]).concat(L.towers.map(([x, z]) => [x, z, 8]));
@@ -29,14 +28,14 @@ const SPOTS = [
   { name: 'Thượng Hải Tower', x: L.rx + 46, z: 0, yaw: -0.75, at: L.tower },
   { name: 'Cầu Phố Đông', x: L.west - 4, z: 16, yaw: -0.85, at: [L.rx, 0] },
 ];
-const M = 6, X0 = -EDGE_X - M, X1 = L.east + 72, Z0 = -EDGE_Z - M, Z1 = EDGE_Z + M;
+const M = 6, X0 = -EDGE_X - M, X1 = L.east + 72, Z0 = -EDGE_Z - 16, Z1 = EDGE_Z + M;
 
 // the name of the place at (x, z)
 function whereIs(x, z) {
   if (x > L.east) return 'Phố Đông (Lujiazui)';
   if (x > L.west) return Math.abs(z) < 5 ? 'Cầu Phố Đông' : 'Sông Hoàng Phố';
   if (x > EDGE_X + 3.5) return 'Bến Thượng Hải';
-  if (Math.abs(x) > EDGE_X + 3.5 || Math.abs(z) > EDGE_Z + 3.5) return 'Ngoại ô';
+  if (Math.abs(x) > EDGE_X + 3.5 || Math.abs(z) > EDGE_Z + 3.5) return 'Ven thành phố';
   const cell = CELLS.find(c => Math.abs(x - c.x) < BLK / 2 && Math.abs(z - c.z) < BLK / 2);
   if (cell) return SCENE[cell.id] ? SCENE[cell.id].title : NAMES[cell.id] || 'Trên phố';
   // on a street: its name (the nearer one at a crossroads)
@@ -69,6 +68,7 @@ export default function MiniMap({ track, onGo }) {
         <rect x={X0} y={Z0} width={X1 - X0} height={Z1 - Z0} rx="6" fill="#8d9298" />
         <rect x={EDGE_X + 3.5} y={Z0} width={L.west - EDGE_X - 3.5} height={Z1 - Z0} fill="#ddd2bc" />
         <rect x={L.west} y={Z0} width={L.rw} height={Z1 - Z0} fill="#5aa0c8" />
+        <rect x={X0} y={-EDGE_Z - 14.5} width={L.west - X0} height={9} fill="#5aa0c8" />
         <rect x={L.east} y={Z0} width={X1 - L.east} height={Z1 - Z0} fill="#c9c6bf" />
         <rect x={L.west - 1} y={-4.5} width={L.rw + 2} height={9} fill="#7b8086" />
         {CELLS.map(c => {
