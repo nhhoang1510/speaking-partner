@@ -10,19 +10,19 @@ import { SCENES } from './scenes.js';
 import { B, Furniture, RoomFloor, Window, hsl } from './world/props.jsx';
 import { Person } from './world/people.jsx';
 import { Bake } from './world/bake.jsx';
-import { Campus, Shell, blockedOutside, COLS, X0, BX, BZ, CX, LEN, FENCE, GATE } from './world/campus.jsx';
-import { Area, Promenade, blockedInside, islandGeometry, pathZ, ZA, ZB, ZC } from './world/open.jsx';
+import { Campus, Shell, blockedOutside, ROOM_XS, X0, BX, BZ, CX, LEN, FENCE, GATE } from './world/campus.jsx';
+import { Area, Promenade, blockedInside, islandGeometry, walkZ, CROSS, PLACES, ZA, ZB } from './world/open.jsx';
 
 const MOBILE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 const SAID_SHOW_MS = 12000;
 const ENTRANCE = new THREE.Vector3(17, 0, 0);
-const ROOM_W = 7;                                     // one area per 7 m of hall, on each side of the promenade
 const TALL = 2.4, LOW = 0.35;                         // far outer walls, near walls
 
-// areas: six north of the promenade, six south, each opening towards it (local +z points at the promenade)
+// areas, scattered over the hall, each turned to open onto a walk (local +z points out of the open side);
+// `north` ones have their back to the far side, away from the overview camera
 export const ROOMS = Object.fromEntries(SCENES.map((sc, i) => {
-  const north = i < COLS, col = i % COLS, x = X0 + ROOM_W / 2 + col * ROOM_W, z = north ? -ZC : ZC;
-  return [sc.id, { scene: sc, i, col, north, pos: new THREE.Vector3(x, 0, z), rot: north ? 0 : Math.PI }];
+  const [x, z, rot] = PLACES[i];
+  return [sc.id, { scene: sc, i, north: Math.cos(rot) > 0, pos: new THREE.Vector3(x, 0, z), rot }];
 }));
 
 
@@ -40,7 +40,10 @@ export function describe(u) {
 // once I'm on its floor
 const ROOM_LIST = Object.values(ROOMS);
 export function roomAt(x, z) {
-  return ROOM_LIST.find(r => Math.abs(x - r.pos.x) < ZA - 0.3 && Math.abs(z - r.pos.z) < ZB - 0.3) || null;
+  return ROOM_LIST.find(r => {
+    const dx = x - r.pos.x, dz = z - r.pos.z, c = Math.cos(r.rot), s = Math.sin(r.rot);
+    return Math.abs(c * dx - s * dz) < ZA - 0.3 && Math.abs(s * dx + c * dz) < ZB - 0.3;
+  }) || null;
 }
 function canStand(x, z) {
   // outside: anywhere on the grounds inside the fence (and out through the gate to the street)
@@ -58,10 +61,10 @@ function seen(viewer, x, z, range = 9) {
   return Math.hypot(viewer.pos.x - x, viewer.pos.z - z) < range;
 }
 
-// where a learner stands: along the corridor when not practising, else in front of their room's character
+// where a learner stands: along a walk when not practising, else in front of their area's character
 function spot(u, k) {
   const r = u.scene && ROOMS[u.scene];
-  if (!r) return new THREE.Vector3(X0 + 3 + ((k * 3.7) % (LEN - 5)), 0, (k % 2 ? 0.55 : -0.55));
+  if (!r) { const x = X0 + 3 + ((k * 3.7) % (LEN - 8)), side = k % 2 ? 1 : -1; return new THREE.Vector3(x, 0, walkZ(side, x) + (k % 4 < 2 ? 0.4 : -0.4)); }
   const local = new THREE.Vector3((k % 3 - 1) * 0.95, 0, 0.9 + Math.floor(k / 3) * 0.9);
   return local.applyAxisAngle(new THREE.Vector3(0, 1, 0), r.rot).add(r.pos);
 }
@@ -81,9 +84,29 @@ function Npc({ room, busy }) {
   );
 }
 
-// where an area opens onto the promenade
-const mouth = r => new THREE.Vector3(r.pos.x, 0, r.pos.z + (r.north ? 1 : -1) * (ZB + 0.25));
 const local = (r, x, z) => new THREE.Vector3(x, 0, z).applyAxisAngle(new THREE.Vector3(0, 1, 0), r.rot).add(r.pos);
+const mouth = r => local(r, 0, ZB + 0.4);              // just outside an area's open side
+const onWalk = (side, x) => new THREE.Vector3(x, 0, walkZ(side, x));
+
+// the way from p to goal: out of the old area, along its walk, over a cross walk (or round by the front door)
+// if the new area opens onto the other walk, along that one, and in
+function route(p, goal) {
+  const from = roomAt(p.x, p.z), to = roomAt(goal.x, goal.z), pts = [];
+  if (from && from === to) return [goal.clone()];
+  let a = from ? mouth(from) : p.clone();
+  if (from) pts.push(a);
+  if (p.x > BX - 1) { a = new THREE.Vector3(BX - 1, 0, 0); pts.push(a); }
+  const b = to ? mouth(to) : goal, sa = a.z < 0 ? -1 : 1, sb = b.z < 0 ? -1 : 1;
+  pts.push(onWalk(sa, a.x));
+  if (sa !== sb) {
+    const cx = [...CROSS, 12].reduce((m, x) => Math.abs(a.x - x) + Math.abs(x - b.x) < Math.abs(a.x - m) + Math.abs(m - b.x) ? x : m);
+    pts.push(onWalk(sa, cx), onWalk(sb, cx));
+  }
+  pts.push(onWalk(sb, b.x));
+  if (to) pts.push(mouth(to));
+  pts.push(goal.clone());
+  return pts;
+}
 
 function Learner({ u, target, me, now, pilot, viewer }) {
   const g = useRef(), body = useRef(), ring = useRef(), tag = useRef(), act = useRef({});
@@ -93,21 +116,12 @@ function Learner({ u, target, me, now, pilot, viewer }) {
   useFrame(({ clock }, dt) => {
     if (!g.current) return;
     if (pilot && pilot.on) { drive(pilot, pos.current, g.current, clock.elapsedTime, dt); last.current = null; return; }
-    // walk via the promenade: out of the old area's open side, along the promenade, in through the new one's
-    // others walking by themselves: straight to where they last reported standing
+    // walk along the walks (see route); others walking by themselves: straight to where they last reported standing
     const free = u.free && !me;
     const goalPos = free ? new THREE.Vector3(u.x, 0, u.z) : target;
     if (!last.current || !last.current.equals(goalPos)) {
       last.current = goalPos.clone();
-      const p = pos.current, pts = [];
-      if (!free) {
-        const from = roomAt(p.x, p.z), to = roomAt(goalPos.x, goalPos.z);
-        if (from) pts.push(mouth(from));
-        if (p.x > BX - 1) pts.push(new THREE.Vector3(BX - 1, 0, 0));
-        if (to && to !== from) pts.push(mouth(to));
-      }
-      pts.push(goalPos.clone());
-      path.current = pts;
+      path.current = free ? [goalPos.clone()] : route(pos.current, goalPos);
     }
     const t = clock.elapsedTime, p = pos.current, goal = path.current[0];
     let walking = false;
@@ -168,9 +182,9 @@ function drive(pilot, p, g, t, dt) {
   if (pilot.fresh) {
     // just stepped into my character: stand somewhere legal and look out of the area / down the hall
     pilot.fresh = false;
-    if (!canStand(p.x, p.z)) { p.x = Math.max(-12, Math.min(12, p.x)); p.z = pathZ(p.x); }
+    if (!canStand(p.x, p.z)) { p.x = Math.max(-12, Math.min(12, p.x)); p.z = walkZ(-1, p.x); }
     const r = roomAt(p.x, p.z);
-    pilot.yaw = pilot.wantYaw = r ? (r.pos.z < 0 ? Math.PI : 0) : (p.x > 0 ? Math.PI / 2 : -Math.PI / 2);
+    pilot.yaw = pilot.wantYaw = r ? r.rot + Math.PI : (p.x > 0 ? Math.PI / 2 : -Math.PI / 2);
     pilot.wantPitch = pilot.pitch;
   }
   // arrows turn; the on-screen stick turns too when pushed sideways: nothing near the middle (so walking straight
@@ -261,7 +275,7 @@ function Room({ room, count, busy, mine, onPick, viewer, full, island }) {
         <Furniture id={sc.id} hue={sc.hue} north={false} />
         <Npc room={room} busy={busy} />
       </group>
-      <Html position={[0, room.north ? 3.2 : 1.6, room.north ? -3 : 3.4]} center zIndexRange={[8, 0]}>
+      <Html position={[-Math.sin(room.rot) * 3, room.north ? 3.2 : 2, -Math.cos(room.rot) * 3]} center zIndexRange={[8, 0]}>
         <button ref={label} className={'w-room' + (mine ? ' mine' : '') + (hover ? ' hover' : '')} style={{ '--c': hsl(sc.hue, 55, 45) }} onClick={() => onPick(sc)}>
           {sc.title}<small>{sc.name}{count ? ` · ${count} người` : ''}</small>
         </button>
@@ -287,8 +301,8 @@ function Walls({ full }) {
       {W('s', CX, Z, LEN, 0.25, LOW)}
       {W('e1', BX, -(1.5 + seg / 2), 0.25, seg, LOW)}
       {W('e2', BX, 1.5 + seg / 2, 0.25, seg, LOW)}
-      {ROOM_LIST.filter(r => r.north).flatMap(r => [-1.7, 1.7].map(dx => <Window key={'n' + r.pos.x + dx} p={[r.pos.x + dx, 1.45, -Z + 0.18]} w={1.6} />))}
-      {[-5.25, 5.65].map(z => <Window key={'w' + z} p={[X0 + 0.18, 1.45, z]} r={Math.PI / 2} w={2.2} />)}
+      {ROOM_XS.flatMap(x => [-1.7, 1.7].map(dx => <Window key={'n' + x + dx} p={[x + dx, 1.45, -Z + 0.18]} w={1.6} />))}
+      {[-8.5, 8.5].map(z => <Window key={'w' + z} p={[X0 + 0.18, 1.45, z]} r={Math.PI / 2} w={2.2} />)}
     </group>
   );
 }
@@ -320,7 +334,7 @@ function Rig({ focus, fit, nonce }) {
   const goal = useMemo(() => {
     const r = focus && ROOMS[focus];
     // phones in portrait: fill the width and let the sides run off, rather than a tiny whole school
-    const base = (size.width < 600 ? size.width / 30 : Math.min(size.width / 46, size.height / 30)) * fit;
+    const base = (size.width < 600 ? size.width / 34 : Math.min(size.width / 52, size.height / 40)) * fit;
     return r ? { target: r.pos.clone(), zoom: size.height < 500 && size.width > size.height ? size.height / 9 : Math.min(size.width / 13, size.height / 12) }
              : { target: new THREE.Vector3(CX + 4, 0, 0), zoom: base };
   }, [focus, size.width, size.height, fit, nonce]);
