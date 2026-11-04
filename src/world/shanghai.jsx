@@ -28,8 +28,10 @@ export function layout(edgeX, edgeZ, far) {
 export function blockedShanghai(x, z, edgeX, edgeZ, far, road) {
   const L = layout(edgeX, edgeZ, far);
   if (x > L.west + 0.6 && x < L.east - 0.6 && z > L.north && Math.abs(z) > road / 2 + 0.6) return true;
+  if (x < L.east) return false;
   const near = ([a, b], r) => Math.abs(x - a) < r && Math.abs(z - b) < r;
-  return near(L.pearl, 4) || near(L.jinmao, 5.5) || near(L.swfc, 7) || near(L.tower, 8.5) || L.towers.some(([a, b]) => near([a, b], 4.8));
+  return near(L.pearl, 4) || near(L.jinmao, 5.5) || near(L.swfc, 7) || near(L.tower, 8.5) || L.towers.some(([a, b]) => near([a, b], 4.8))
+    || fillOf(L, road).out.some(([a, b]) => near([a, b], 5));
 }
 
 function Cable({ a, b }) {
@@ -248,6 +250,12 @@ function RingBridge({ x, z }) {
 }
 
 // the rest of Pudong: mid-rise blocks on a grid, wherever nothing bigger stands, with trees between
+// (worked out once per town size: walking asks for it every step)
+const filled = {};
+export function fillOf(L, road) {
+  const k = L.rx + ':' + L.far + ':' + road;
+  return filled[k] || (filled[k] = fill(L, road));
+}
 function fill(L, road) {
   const out = [], trees = [], taken = [L.pearl, L.jinmao, L.swfc, L.tower].map(([x, z]) => [x, z, 14]).concat(L.towers.map(([x, z]) => [x, z, 9]));
   for (let x = L.east + 10; x < L.far - 30; x += 15) for (let z = -76; z < 58; z += 15) {
@@ -264,7 +272,7 @@ function fill(L, road) {
 export function Shanghai({ edgeX, edgeZ, far, road }) {
   const L = useMemo(() => layout(edgeX, edgeZ, far), [edgeX, edgeZ, far]);
   const len = far - L.north;
-  const more = useMemo(() => fill(L, road), [L, road]);
+  const more = fillOf(L, road);
   const bundLamps = useMemo(() => Array.from({ length: Math.floor((edgeZ * 2 + 40) / 12) }, (_, i) => -edgeZ - 10 + i * 12).filter(z => Math.abs(z) > road / 2 + 2), [edgeZ, road]);
   return (
     <group>
