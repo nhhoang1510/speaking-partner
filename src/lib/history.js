@@ -40,6 +40,23 @@ export function memoryFor(sceneId, history) {
          'Greet them like someone you remember and, if it fits, refer to last time briefly. Do not repeat these lines back.';
 }
 
+// ---------------------------------------------------------------- the notebook
+// Everything worth learning from past sessions, newest first and without repeats: sentences the coach said
+// to say better (with what was said), and the phrases suggested in the summaries. Learners can tick off the
+// ones they know; those go to the bottom.
+const KNOWN = 'sp-known';
+export function loadKnown() { try { return new Set(JSON.parse(localStorage.getItem(KNOWN) || '[]')); } catch (e) { return new Set(); } }
+export function saveKnown(set) { try { localStorage.setItem(KNOWN, JSON.stringify([...set])); } catch (e) { /* private mode */ } }
+export function notebook(history) {
+  const out = [], seen = new Set();
+  const add = x => { const k = x.text.trim().toLowerCase(); if (!k || seen.has(k)) return; seen.add(k); out.push(x); };
+  for (const h of history) {
+    h.msgs.forEach(m => { if (m.fix && m.fix.better) add({ kind: 'fix', text: m.fix.better, said: m.text, note: m.fix.note, scene: h.scene, t: h.start }); });
+    ((h.summary && h.summary.phrases) || []).forEach(p => add({ kind: 'phrase', text: p, scene: h.scene, t: h.start }));
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------- progress
 // Sentences said per day and per room, kept apart from the (capped) history so the streak and the room
 // counts survive old sessions being dropped: { days: { 'YYYY-MM-DD': { sessionId: sentences } },
