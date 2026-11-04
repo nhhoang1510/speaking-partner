@@ -45,13 +45,17 @@ export function Many({ at, geo, c, cast = true, e }) {
   );
 }
 
-export function Tree({ x, z, k, pine }) {
+// pine: a conifer; plane: a plane tree (the pale-barked, wide-crowned trees lining Shanghai's streets)
+export function Tree({ x, z, k, pine, plane }) {
   return (
     <group position={[x, 0, z]} scale={k}>
-      <C p={[0, 0.9, 0]} r={0.16} r2={0.22} h={1.8} c="#7a5236" seg={8} />
+      <C p={[0, plane ? 1.2 : 0.9, 0]} r={0.16} r2={0.22} h={plane ? 2.4 : 1.8} c={plane ? '#b9ad94' : '#7a5236'} seg={8} />
       {pine ? <>
         <mesh position={[0, 2.4, 0]} castShadow><coneGeometry args={[1.3, 2.2, 9]} /><meshStandardMaterial color="#3f7a4f" /></mesh>
         <mesh position={[0, 3.6, 0]} castShadow><coneGeometry args={[0.95, 1.8, 9]} /><meshStandardMaterial color="#4a8a5a" /></mesh>
+      </> : plane ? <>
+        <S p={[0, 3.2, 0]} r={1.5} c="#7fa850" sc={[1.25, 0.7, 1.25]} /><S p={[0.8, 3.6, 0.3]} r={0.95} c="#8db85c" sc={[1.2, 0.8, 1.2]} />
+        <S p={[-0.8, 3.5, -0.3]} r={0.95} c="#74a048" sc={[1.2, 0.8, 1.2]} />
       </> : <>
         <S p={[0, 2.5, 0]} r={1.25} c="#6f9f55" /><S p={[0.6, 3.1, 0.3]} r={0.85} c="#7fb062" />
         <S p={[-0.55, 2.9, -0.35]} r={0.8} c="#66954e" />
@@ -60,7 +64,8 @@ export function Tree({ x, z, k, pine }) {
   );
 }
 
-export function Car({ x, z, c, r = 0 }) {
+// taxi: a light on the roof (Shanghai's taxis are turquoise or gold)
+export function Car({ x, z, c, r = 0, taxi }) {
   return (
     <group position={[x, 0, z]} rotation-y={r}>
       <B p={[0, 0.55, 0]} s={[1.75, 0.6, 4.1]} c={c} metal={0.5} rough={0.3} />
@@ -69,6 +74,7 @@ export function Car({ x, z, c, r = 0 }) {
       {[-1.3, 1.3].flatMap(dz => [-0.85, 0.85].map(dx => <C key={dx + ':' + dz} p={[dx, 0.33, dz]} r={0.33} h={0.24} rz={Math.PI / 2} c="#1e1e1e" seg={14} />))}
       {[-0.6, 0.6].map(dx => <B key={dx} p={[dx, 0.62, 2.06]} s={[0.35, 0.14, 0.02]} c="#fff8d8" e="#fff3c0" ei={0.4} cast={false} />)}
       {[-0.6, 0.6].map(dx => <B key={'t' + dx} p={[dx, 0.66, -2.06]} s={[0.35, 0.12, 0.02]} c="#c0392b" e="#c0392b" ei={0.3} cast={false} />)}
+      {taxi && <B p={[0, 1.5, -0.15]} s={[0.7, 0.22, 0.3]} c="#fff3c0" e="#ffe08a" ei={0.6} cast={false} />}
     </group>
   );
 }

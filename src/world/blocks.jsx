@@ -247,7 +247,7 @@ function vSign(text, bg, fg = '#ffffff') {
     ch.forEach((c, i) => g.fillText(c, w / 2, 10 + step * (i + 0.5)));
   }, [1, 1]);
 }
-function Neon({ text, bg, p, h = 2.6, r = 0 }) {
+export function Neon({ text, bg, p, h = 2.6, r = 0 }) {
   const night = useContext(Night), map = useMemo(() => vSign(text, bg), [text, bg]);
   return (
     <mesh position={p} rotation-y={r}>
@@ -256,7 +256,7 @@ function Neon({ text, bg, p, h = 2.6, r = 0 }) {
     </mesh>
   );
 }
-const Lantern = ({ p }) => (
+export const Lantern = ({ p }) => (
   <group position={p}>
     <S p={[0, 0, 0]} r={0.22} c="#d62828" e="#ff3b2f" sc={[1, 0.8, 1]} />
     <B p={[0, 0.2, 0]} s={[0.16, 0.06, 0.16]} c="#e9b949" cast={false} />
@@ -264,7 +264,7 @@ const Lantern = ({ p }) => (
   </group>
 );
 // a hipped Chinese roof: a low pyramid with the four corners flicked up
-function ChineseRoof({ p, w, c = '#3c4a4f', h = 0.9 }) {
+export function ChineseRoof({ p, w, c = '#3c4a4f', h = 0.9 }) {
   return (
     <group position={p}>
       <mesh rotation-y={Math.PI / 4} castShadow><coneGeometry args={[w * 0.75, h, 4]} /><meshStandardMaterial color={c} /></mesh>
@@ -415,42 +415,101 @@ function Shikumen({ seed }) {
 }
 
 // ---------------------------------------------------------------- the kinds
+// Shanghai's towers wear hats: a stepped spire, a pagoda roof, or a "flying saucer" restaurant on top
+function Crown({ h, v, wall }) {
+  const night = useContext(Night), glow = night ? { e: '#9fd3ff', ei: 0.6 } : {};
+  if (v === 0) return (
+    <group position={[0, h + 0.4, 0]}>
+      <B p={[0, 0.8, 0]} s={[6, 1.6, 5]} c={wall} /><B p={[0, 2.2, 0]} s={[3.6, 1.2, 3]} c={wall} />
+      <mesh position={[0, 4.8, 0]} rotation-y={Math.PI / 4} castShadow><coneGeometry args={[1.2, 4, 4]} /><meshStandardMaterial color="#d7dadd" metalness={0.5} roughness={0.3} /></mesh>
+    </group>
+  );
+  if (v === 1) return (
+    <group position={[0, h + 0.4, 0]}>
+      <B p={[0, 0.9, 0]} s={[5, 1.8, 4.4]} c={wall} />
+      <ChineseRoof p={[0, 2.4, 0]} w={5.6} h={1.6} c="#2f4f4f" />
+      <C p={[0, 4.2, 0]} r={0.08} h={2.2} c="#d4a017" /><S p={[0, 5.3, 0]} r={0.25} c="#d4a017" />
+    </group>
+  );
+  return (
+    <group position={[0, h + 0.4, 0]}>
+      <C p={[0, 1.5, 0]} r={0.9} h={3} c={wall} seg={12} />
+      <mesh position={[0, 3.4, 0]} castShadow><cylinderGeometry args={[3.2, 2.2, 1.1, 20]} /><meshStandardMaterial color="#cfd6dc" metalness={0.4} roughness={0.3} /></mesh>
+      <C p={[0, 3.4, 0]} r={3.22} h={0.35} c="#4f7ea8" seg={20} {...glow} />
+      <C p={[0, 4.6, 0]} r={0.06} h={1.6} c="#ccc" />
+    </group>
+  );
+}
+const TOWER_SIGNS = [['东方集团', '#c0392b'], ['华申大厦', '#1f6fb2'], ['申江实业', '#2a9d5c'], ['浦江置业', '#8e44ad'], ['金桥中心', '#d4a017']];
 function Tower({ seed }) {
   const r = rnd(seed), h = 18 + Math.round(r() * 14), wall = pick(r, ['#8fa8bf', '#3d4f63', '#6f8397', '#9fb4a8', '#7b8fa8']);
-  const glass = pick(r, ['#4f7ea8', '#6aa0c8', '#5c8f9e']), twin = r() < 0.5;
+  const glass = pick(r, ['#4f7ea8', '#6aa0c8', '#5c8f9e']), twin = r() < 0.5, [name, bg] = TOWER_SIGNS[seed % TOWER_SIGNS.length];
   return twin
-    ? <><Block p={[-1, 0, 0]} s={[7, h, 7]} wall={wall} glass={glass} strip /><Block p={[3.2, 0, 1]} s={[4, h * 0.45, 6]} wall="#56708a" glass="#7fb2d6" /></>
-    : <><Block p={[0, 0, 0]} s={[9, h, 8]} wall={wall} glass={glass} strip /><B p={[0, h + 0.8, 0]} s={[4, 1.2, 3]} c="#d7dadd" /></>;
+    ? <>
+        <Block p={[-1, 0, 0]} s={[7, h, 7]} wall={wall} glass={glass} strip />
+        <group position={[-1, 0, 0]}><Crown h={h} v={seed % 3} wall={wall} /></group>
+        <Block p={[3.2, 0, 1]} s={[4, h * 0.45, 6]} wall="#56708a" glass="#7fb2d6" />
+        <Neon text={name} bg={bg} p={[2.4, h * 0.45 - 2, 4.05]} h={3.2} />
+      </>
+    : <>
+        <Block p={[0, 0, 0]} s={[9, h, 8]} wall={wall} glass={glass} strip />
+        <Crown h={h} v={seed % 3} wall={wall} />
+        <Neon text={name} bg={bg} p={[3.6, h - 3, 4.06]} h={3.6} />
+      </>;
 }
 
+// Shanghai's older flats: tiled walls, an air conditioner by many windows, washing hung out on poles, and
+// the pitched roof the city added on top of the flat ones
+const WASH = ['#e76f51', '#f4f1ea', '#2a9d8f', '#e9c46a', '#457b9d', '#b56576'];
 function Flats({ seed }) {
-  const r = rnd(seed), c = pick(r, ['#e6c3a5', '#b9d3c4', '#d8c7e4', '#f0d9a8', '#c9d6e8', '#e8b9a8']), floors = 3 + Math.floor(r() * 3);
-  const h = floors * 3 + 2, balconies = [];
-  for (let y = 3; y < h; y += 3) for (let a = -3; a <= 3; a += 2) balconies.push([a, y - 1.3]);
+  const r = rnd(seed), c = pick(r, ['#ece7dc', '#e3d6c2', '#d9dfe3', '#efe2cf', '#d8cfc4', '#e6d3c3']), floors = 5 + Math.floor(r() * 3);
+  const fh = 2.4, h = floors * fh + 1, roof = pick(r, ['#b5523b', '#3e6e9a', '#4b5257', '#8c5a3c']);
+  const ac = [], wash = [];
+  for (let f = 1; f < floors; f++) for (let a = -3.6; a <= 3.7; a += 2.4) {
+    if (r() < 0.55) ac.push([a + 0.6, f * fh + 0.25]);
+    if (r() < 0.35) wash.push([a - 0.2, f * fh + 1.5, pick(r, WASH), pick(r, WASH)]);
+  }
   return (
     <>
-      <Block p={[0, 0, -0.5]} s={[9.5, h, 7.5]} wall={c} />
-      {balconies.map(([a, y]) => <group key={a + ':' + y}><B p={[a, y, 3.65]} s={[1.5, 0.1, 0.9]} c="#f4f1ea" /><B p={[a, y + 0.45, 4.07]} s={[1.5, 0.8, 0.05]} c="#ffffff" o={0.7} /></group>)}
+      <Block p={[0, 0, -0.5]} s={[9.5, h, 7.5]} wall={c} glass="#7d9fb5" />
+      {ac.map(([a, y]) => <B key={a + ':' + y} p={[a, y, 3.45]} s={[0.75, 0.45, 0.4]} c="#f2f2ee" />)}
+      {wash.map(([a, y, c1, c2]) => (
+        <group key={a + ':' + y} position={[a, y, 3.7]}>
+          <B p={[0, 0, 0]} s={[1.7, 0.04, 0.04]} c="#8a8f94" cast={false} />
+          <B p={[-0.4, -0.3, 0]} s={[0.45, 0.55, 0.03]} c={c1} cast={false} />
+          <B p={[0.3, -0.25, 0]} s={[0.5, 0.45, 0.03]} c={c2} cast={false} />
+        </group>
+      ))}
+      {[-1, 1].map(k => (
+        <mesh key={k} position={[0, h + 1.15, -0.5 + k * 1.9]} rotation-x={k * 0.42} castShadow>
+          <boxGeometry args={[9.9, 0.16, 4.15]} /><meshStandardMaterial color={roof} />
+        </mesh>
+      ))}
     </>
   );
 }
 
+const OFFICE_SIGNS = ['申华大厦 · SHENHUA', '外滩中心 · BUND CENTRE', '江南贸易 · JIANGNAN TRADE', '海通大楼 · HAITONG BLDG', '新世纪 · NEW CENTURY'];
 function Offices({ seed }) {
   const r = rnd(seed), a = pick(r, ['#c7cdd3', '#a9b8c6', '#d9cfc1', '#b5c4b1']), b = pick(r, ['#7d8a96', '#8c7b6b', '#5f7d8c']);
+  const h = 10 + Math.round(r() * 6);
   return (
     <>
-      <Block p={[-2.2, 0, -0.8]} s={[5, 10 + Math.round(r() * 6), 7.5]} wall={a} glass="#6aa0c8" strip />
+      <Block p={[-2.2, 0, -0.8]} s={[5, h, 7.5]} wall={a} glass="#6aa0c8" strip />
       <Block p={[2.6, 0, 0.4]} s={[4.2, 6 + Math.round(r() * 4), 6]} wall={b} glass="#9cc7e2" />
+      <Sign text={OFFICE_SIGNS[seed % OFFICE_SIGNS.length]} bg="#a11d1d" fg="#ffe08a" p={[-2.2, h + 1.1, 1.5]} w={4.6} h={0.75} />
+      {[-4, -0.4].map(x => <B key={x} p={[x, h + 0.6, 1.45]} s={[0.1, 1, 0.1]} c="#555" />)}
     </>
   );
 }
 
-const SHOPS = [['BAKERY', '#d9883b'], ['PHARMACY', '#2f9e6e'], ['BOOKS', '#6b4b9a'], ['FLOWERS', '#d6457e'], ['MINIMART', '#2e86de'],
-  ['PHỞ 24', '#c0392b'], ['BARBER', '#34495e'], ['PIZZA', '#e67e22'], ['TOYS', '#f1c40f'], ['PHONES', '#16a085'], ['TEA HOUSE', '#7d4f36'], ['GYM', '#2c3e50']];
+const SHOPS = [['生煎 · SHENGJIAN', '#c0392b', '生煎包'], ['药房 · PHARMACY', '#2f9e6e', '药房'], ['书店 · BOOKS', '#6b4b9a', '书店'], ['花店 · FLOWERS', '#d6457e', '鲜花'],
+  ['便利店 · 24H', '#2e86de', '便利店'], ['小笼包 · DUMPLINGS', '#b03a2e', '小笼包'], ['理发 · BARBER', '#34495e', '理发'], ['面馆 · NOODLES', '#e67e22', '面馆'],
+  ['奶茶 · MILK TEA', '#d4a017', '奶茶'], ['手机 · PHONES', '#16a085', '手机'], ['茶叶 · TEA', '#7d4f36', '茶叶'], ['包子 · BAOZI', '#8e44ad', '包子铺']];
 function Shops({ seed }) {
   const r = rnd(seed);
   return [-3.2, 0, 3.2].map((x, i) => {
-    const [name, c] = SHOPS[(seed * 7 + i * 5) % SHOPS.length], h = 3.6 + Math.round(r() * 2) * 1.6, wall = pick(r, ['#efe5d6', '#f4d9c6', '#d9e4ec', '#e9e1f5', '#f6efd2']);
+    const [name, c, v] = SHOPS[(seed * 7 + i * 5) % SHOPS.length], h = 3.6 + Math.round(r() * 2) * 1.6, wall = pick(r, ['#efe5d6', '#f4d9c6', '#d9e4ec', '#e9e1f5', '#f6efd2']);
     return (
       <group key={x} position={[x, 0, -0.6]}>
         <B p={[0, h / 2, 0]} s={[3.1, h, 6.6]} c={wall} />
@@ -459,31 +518,38 @@ function Shops({ seed }) {
         <B p={[0, 1.2, 3.31]} s={[2.4, 1.9, 0.04]} c="#bfe3f5" o={0.5} cast={false} />
         <Sign text={name} bg={c} p={[0, 2.55, 3.36]} w={2.8} h={0.5} />
         <mesh position={[0, 2.1, 3.85]} rotation-x={0.35}><boxGeometry args={[2.9, 0.04, 1.1]} /><meshStandardMaterial map={stripes(c, '#ffffff')} /></mesh>
+        {i !== 1 && <Lantern p={[i ? 1.1 : -1.1, 2.95, 3.6]} />}
+        {h > 4 && <Neon text={v} bg={c} p={[i ? 1.35 : -1.35, h - 1.4, 3.75]} h={2} r={Math.PI / 2} />}
       </group>
     );
   });
 }
 
-const HOUSE_WALLS = ['#f4e3c3', '#e8d0c0', '#dce8e0', '#f2f0e6', '#e6dcef', '#f6d8b8'], ROOFS = ['#b04a3a', '#5d6d7e', '#8c5a3c', '#3f6f5a', '#a0522d'];
+// old villas (the former French Concession's "lao yang fang"): red brick or cream walls, steep grey roofs,
+// white window frames, a garden behind a low wall with a gate
+const HOUSE_WALLS = ['#b5574a', '#e9dcc3', '#c98f6a', '#a84e3e', '#efe3cc', '#d9b48f'], ROOFS = ['#4b5257', '#5a4a42', '#7a3b2e', '#3f4a50'];
 function Houses({ seed }) {
   const r = rnd(seed);
   return (
     <>
       <Ground c="#86b366" />
       {[[-2.45, -2.3], [2.45, -2.3], [-2.45, 2.3], [2.45, 2.3]].map(([x, z], i) => {
-        const w = pick(r, HOUSE_WALLS), roof = pick(r, ROOFS), h = 2.6 + (r() < 0.4 ? 2.4 : 0);
+        const w = pick(r, HOUSE_WALLS), roof = pick(r, ROOFS), h = 2.8 + (r() < 0.6 ? 2.2 : 0);
         return (
           <group key={i} position={[x, 0, z]}>
             <B p={[0, h / 2, -0.3]} s={[3.6, h, 3.2]} c={w} />
-            <mesh position={[0, h + 0.75, -0.3]} rotation-y={Math.PI / 4} castShadow><coneGeometry args={[2.75, 1.5, 4]} /><meshStandardMaterial color={roof} roughness={0.8} /></mesh>
-            <B p={[0.9, 0.9, 1.31]} s={[0.8, 1.8, 0.04]} c="#6e4630" />
-            <B p={[-0.8, 1.5, 1.31]} s={[0.9, 0.8, 0.04]} c="#bfe0f2" e="#bfe0f2" ei={0.3} />
-            {h > 3 && <B p={[0, 3.9, 1.31]} s={[1.6, 0.8, 0.04]} c="#bfe0f2" e="#bfe0f2" ei={0.3} />}
-            <B p={[0, 0.3, 2.05]} s={[3.8, 0.6, 0.15]} c="#4f8a45" />
+            <mesh position={[0, h + 0.95, -0.3]} rotation-y={Math.PI / 4} castShadow><coneGeometry args={[2.75, 1.9, 4]} /><meshStandardMaterial color={roof} roughness={0.8} /></mesh>
+            <B p={[0.9, 0.9, 1.31]} s={[0.8, 1.8, 0.04]} c="#3b2a20" />
+            <B p={[-0.8, 1.5, 1.31]} s={[1.0, 0.9, 0.03]} c="#f4f1ea" /><B p={[-0.8, 1.5, 1.33]} s={[0.8, 0.7, 0.03]} c="#3d4f5c" e="#bfe0f2" ei={0.15} />
+            {h > 3 && <><B p={[0, 3.9, 1.31]} s={[1.8, 1.0, 0.03]} c="#f4f1ea" /><B p={[0, 3.9, 1.33]} s={[1.6, 0.8, 0.03]} c="#3d4f5c" e="#bfe0f2" ei={0.15} /></>}
+            {h > 3 && <B p={[0, 3.3, 1.55]} s={[2, 0.1, 0.5]} c="#f4f1ea" />}
           </group>
         );
       })}
-      {r() < 0.6 && <Car x={0} z={0.3} c={pick(r, ['#c0392b', '#2e86de', '#f5f6fa', '#10ac84'])} r={Math.PI / 2} />}
+      {[-1, 1].map(k => <B key={k} p={[k * 2.95, 0.6, LOT - 0.15]} s={[3.9, 1.2, 0.3]} c="#d9cdb5" />)}
+      {[-1, 1].map(k => <group key={'g' + k}><B p={[k * 1.0, 0.8, LOT - 0.15]} s={[0.4, 1.6, 0.4]} c="#cfc3a6" /><S p={[k * 1.0, 1.75, LOT - 0.15]} r={0.16} c="#fff6d6" e="#ffe8b0" /></group>)}
+      <Tree x={-3.9} z={0} k={0.6} plane /><Tree x={3.9} z={0} k={0.6} plane />
+      {r() < 0.6 && <Car x={0} z={0.3} c={pick(r, ['#2c3e50', '#f5f6fa', '#7a2e3a', '#1e5a4a'])} r={Math.PI / 2} />}
     </>
   );
 }
@@ -507,10 +573,11 @@ function Park({ seed }) {
             {[[-3.4, -3.4], [3.4, -3.4], [-3.4, 3.4], [3.4, 3.4]].map(([a, b], i) => <Tree key={i} x={a} z={b} k={0.85} pine={i === 1} />)}
           </>}
       <Bench x={-2.6} z={0.95} r={Math.PI} /><Bench x={2.6} z={-0.95} />
-      <group position={[pond ? -2.8 : 3.2, 0, 1.6]}>
-        <B p={[0, 1.1, 0]} s={[1.6, 0.08, 0.08]} c="#e84a5f" />
-        {[-0.8, 0.8].map(k => <B key={k} p={[k, 0.55, 0]} s={[0.08, 1.1, 0.08]} c="#e84a5f" />)}
-        <B p={[0, 0.4, 0]} s={[0.4, 0.04, 0.2]} c="#ffd166" />
+      <group position={[pond ? -2.8 : 3.2, 0, 1.8]}>
+        {[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([a, b]) => <B key={a + ':' + b} p={[a * 0.6, 0.8, b * 0.6]} s={[0.12, 1.6, 0.12]} c="#a32020" />)}
+        <B p={[0, 0.08, 0]} s={[1.6, 0.16, 1.6]} c="#cfc8bc" />
+        <ChineseRoof p={[0, 1.95, 0]} w={1.7} h={0.6} />
+        <Lantern p={[0, 1.4, 0]} />
       </group>
     </>
   );
@@ -548,8 +615,9 @@ function Market({ seed }) {
           </group>
         );
       }))}
-      <Sign text="CHỢ PHIÊN · MARKET" bg="#c0392b" p={[0, 2.6, LOT - 0.2]} w={4} h={0.6} />
+      <Sign text="菜市场 · CHỢ PHIÊN" bg="#c0392b" p={[0, 2.6, LOT - 0.2]} w={4} h={0.6} />
       {[-2, 2].map(x => <C key={x} p={[x, 1.4, LOT - 0.2]} r={0.06} h={2.8} c="#555" />)}
+      {[-3, 0, 3].map(x => <Lantern key={x} p={[x, 3.1, -0.8]} />)}
     </>
   );
 }
@@ -559,7 +627,7 @@ function Hospital() {
     <>
       <Block p={[0, 0, -1]} s={[10, 12, 7]} wall="#f4f6f8" glass="#86b6d6" />
       <B p={[0, 1.4, 3.3]} s={[4, 2.8, 2.2]} c="#e8eef2" />
-      <Sign text="CITY HOSPITAL" bg="#ffffff" fg="#c0392b" p={[0, 3.4, 4.42]} w={4} h={0.6} />
+      <Sign text="瑞安医院 · HOSPITAL" bg="#ffffff" fg="#c0392b" p={[0, 3.4, 4.42]} w={4} h={0.6} />
       <group position={[3.2, 9.5, 2.56]}><B p={[0, 0, 0]} s={[1.6, 0.5, 0.1]} c="#d64545" e="#d64545" ei={0.4} /><B p={[0, 0, 0]} s={[0.5, 1.6, 0.1]} c="#d64545" e="#d64545" ei={0.4} /></group>
       <group position={[-3.4, 0, 3.6]} rotation-y={Math.PI / 2}><Car x={0} z={0} c="#f4f6f8" /><B p={[0, 1.45, -0.15]} s={[0.6, 0.12, 0.3]} c="#d64545" e="#d64545" ei={0.6} /></group>
     </>
@@ -580,8 +648,9 @@ function Mall() {
       </mesh>
       <B p={[0, 2.6, 4.05]} s={[5.4, 0.15, 1.4]} c="#f4f1ea" />
       {[-4.2, 4.2].map(x => <B key={x} p={[x, 4.2, 3.12]} s={[0.9, 3.4, 0.05]} c={x < 0 ? '#e84a5f' : '#2a9d8f'} cast={false} />)}
-      <Sign text="SKY MALL · TRUNG TÂM THƯƠNG MẠI" bg="#8e44ad" p={[0, 5.2, 3.68]} w={4.4} h={0.7} />
-      <Sign text="SKY MALL" bg="#e84a5f" p={[0, 14, -0.47]} w={4.6} h={1.2} />
+      <Sign text="天空广场 · SKY MALL" bg="#8e44ad" p={[0, 5.2, 3.68]} w={4.4} h={0.7} />
+      <Sign text="天空广场" bg="#e84a5f" p={[0, 14, -0.47]} w={4.6} h={1.2} />
+      <Neon text="购物中心" bg="#d62828" p={[-4.6, 4, 3.4]} h={3} r={Math.PI / 2} />
       {[-3.4, 3.4].map(x => <group key={x} position={[x, 0, 4.1]}>
         <B p={[0, 0.3, 0]} s={[1.4, 0.6, 0.8]} c="#cfc8bc" /><Tree x={0} z={0} k={0.55} />
       </group>)}
@@ -596,7 +665,7 @@ function Station() {
       <C p={[0, 7.2, 1.02]} r={0.6} h={0.06} rx={Math.PI / 2} c="#ffffff" />
       <B p={[0, 7.35, 1.07]} s={[0.05, 0.4, 0.02]} c="#222" cast={false} /><B p={[0.12, 7.2, 1.07]} s={[0.3, 0.05, 0.02]} c="#222" cast={false} />
       <mesh position={[0, 9.7, 0]} rotation-y={Math.PI / 4} castShadow><coneGeometry args={[1.6, 1.6, 4]} /><meshStandardMaterial color="#7a3b2e" /></mesh>
-      <Sign text="CENTRAL STATION · GA TRUNG TÂM" bg="#1f3a5f" p={[0, 3.9, 3.02]} w={6} h={0.6} />
+      <Sign text="上海站 · SHANGHAI STATION" bg="#1f3a5f" p={[0, 3.9, 3.02]} w={6} h={0.6} />
     </>
   );
 }
@@ -634,7 +703,7 @@ function Fuel() {
     <>
       <Ground c="#cfd3d6" />
       <B p={[0, 3.6, 1]} s={[7, 0.4, 4.5]} c="#f4f4f4" />
-      <Sign text="FUEL · 24/7" bg="#d64545" p={[0, 3.6, 3.26]} w={6.8} h={0.38} />
+      <Sign text="加油站 · FUEL 24/7" bg="#d64545" p={[0, 3.6, 3.26]} w={6.8} h={0.38} />
       {[[-3, -1], [3, -1], [-3, 3], [3, 3]].map(([a, b]) => <B key={a + ':' + b} p={[a, 1.7, b]} s={[0.25, 3.4, 0.25]} c="#d64545" />)}
       {[-1.5, 1.5].map(a => <group key={a} position={[a, 0, 1]}><B p={[0, 0.7, 0]} s={[0.6, 1.4, 0.4]} c="#e8e8e8" /><B p={[0, 1.1, 0.21]} s={[0.4, 0.3, 0.02]} c="#253040" /></group>)}
       <Block p={[0, 0, -3.5]} s={[5, 3, 2.6]} wall="#d64545" glass="#bfe3f5" />
@@ -649,7 +718,7 @@ export const KINDS = {
   flats: { draw: Flats, solid: [[0, -0.5, 9.5, 7.5]] },
   offices: { draw: Offices, solid: [[-2.2, -0.8, 5, 7.5], [2.6, 0.4, 4.2, 6]] },
   shops: { draw: Shops, solid: [[0, -0.6, 9.5, 6.6]] },
-  houses: { draw: Houses, solid: [[-2.45, -2.6, 3.6, 3.2], [2.45, -2.6, 3.6, 3.2], [-2.45, 2, 3.6, 3.2], [2.45, 2, 3.6, 3.2]] },
+  houses: { draw: Houses, solid: [[-2.45, -2.6, 3.6, 3.2], [2.45, -2.6, 3.6, 3.2], [-2.45, 2, 3.6, 3.2], [2.45, 2, 3.6, 3.2], [-2.95, LOT - 0.15, 3.9, 0.3], [2.95, LOT - 0.15, 3.9, 0.3]] },
   park: { draw: Park, solid: [[0, 0, 3.8, 3.8]] },
   pitch: { draw: Pitch, solid: [] },
   market: { draw: Market, solid: [] },

@@ -1,5 +1,5 @@
-// The school as a little low-poly town: a grid of streets with lane markings, zebra crossings, traffic lights
-// and cars driving round the blocks. Every practice scene has its own building on its own block (a café, a
+// The school as a little low-poly Shanghai: a grid of streets named after Puxi's, lined with plane trees, with
+// lane markings, zebra crossings, traffic lights and taxis driving round the blocks. Every practice scene has its own building on its own block (a café, a
 // bank, a hotel, a clinic...), with a glass shop front and an open top so the overview can look inside. The
 // blocks around them hold the school itself, offices, flats, shops, houses, parks, a market, a hospital, a
 // station... (see blocks.jsx), and beyond the last street lies the countryside (outskirts.jsx).
@@ -11,9 +11,9 @@
 // overview camera). Blocks are BLK square, P apart; streets run between them.
 import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { B, C, S, rnd } from './props.jsx';
+import { B, C, S, paint, rnd } from './props.jsx';
 import { Many, Tree, Car, Lamp, tex } from './scenery.jsx';
-import { KINDS, Block, signTexture, stripes } from './blocks.jsx';
+import { KINDS, Block, Neon, Lantern, signTexture, stripes } from './blocks.jsx';
 import { Bake } from './bake.jsx';
 import { Outskirts } from './outskirts.jsx';
 import { Highway, blockedHighway } from './highway.jsx';
@@ -35,7 +35,15 @@ const LAYOUT = [
 export const P = 20, BLK = 13, ROAD = P - BLK, NC = LAYOUT[0].length, NR = LAYOUT.length;
 export const colX = c => (c - (NC - 1) / 2) * P, rowZ = r => (r - (NR - 1) / 2) * P;
 export const EDGE_X = (NC / 2) * P, EDGE_Z = (NR / 2) * P;      // centre lines of the outer streets
-const ROADS_X = Array.from({ length: NC + 1 }, (_, k) => (k - NC / 2) * P), ROADS_Z = Array.from({ length: NR + 1 }, (_, k) => (k - NR / 2) * P);
+// the streets are named after Shanghai's: north-south from west to east (the last is the Bund's), east-west from north to south
+export const ROAD_NAMES_X = [['西藏中路', 'Xizang Rd (M)', 'Đường Tây Tạng'], ['浙江中路', 'Zhejiang Rd (M)', 'Đường Chiết Giang'], ['福建中路', 'Fujian Rd (M)', 'Đường Phúc Kiến'],
+  ['山西南路', 'Shanxi Rd (S)', 'Đường Sơn Tây'], ['河南中路', 'Henan Rd (M)', 'Đường Hà Nam'], ['江西中路', 'Jiangxi Rd (M)', 'Đường Giang Tây'], ['四川中路', 'Sichuan Rd (M)', 'Đường Tứ Xuyên'],
+  ['圆明园路', 'Yuanmingyuan Rd', 'Đường Viên Minh Viên'], ['虎丘路', 'Huqiu Rd', 'Đường Hổ Khâu'], ['中山东一路', 'Zhongshan Rd (E-1)', 'Đường Trung Sơn (Bến Thượng Hải)']];
+export const ROAD_NAMES_Z = [['北京东路', 'Beijing Rd (E)', 'Đường Bắc Kinh'], ['天津路', 'Tianjin Rd', 'Đường Thiên Tân'], ['南京东路', 'Nanjing Rd (E)', 'Đường Nam Kinh'],
+  ['九江路', 'Jiujiang Rd', 'Đường Cửu Giang'], ['汉口路', 'Hankou Rd', 'Đường Hán Khẩu'], ['福州路', 'Fuzhou Rd', 'Đường Phúc Châu'], ['广东路', 'Guangdong Rd', 'Đường Quảng Đông'],
+  ['延安东路', "Yan'an Rd (E)", 'Đường Diên An'], ['金陵东路', 'Jinling Rd (E)', 'Đường Kim Lăng']];
+export const ROADS_X = Array.from({ length: NC + 1 }, (_, k) => (k - NC / 2) * P);
+export const ROADS_Z = Array.from({ length: NR + 1 }, (_, k) => (k - NR / 2) * P);
 // walking lines: the middle of the pavement all round every block
 const SIDE = BLK / 2 - 0.8;
 export const WALK_Z = ROADS_Z.slice(0, -1).flatMap((_, r) => [rowZ(r) - SIDE, rowZ(r) + SIDE]);
@@ -50,19 +58,20 @@ const cellAt = (x, z) => {
 };
 
 // the look of each practice building: facade, sign, floors above the shop, an awning
+// (Shanghai style: names in Chinese and English, a vertical neon sign by the door, red lanterns)
 const LOOK = {
-  interview: { c: '#5d7fa6', sign: 'NEXUS TECH · Careers', up: 9, glass: true },
-  accounting: { c: '#c9a43c', sign: 'GOLDEN LEDGER Accounting', up: 4 },
-  finance: { c: '#2c7a73', sign: 'HARBOR INVESTMENTS', up: 7, glass: true },
-  tax: { c: '#b85a45', sign: 'CITY TAX OFFICE', up: 3.5, columns: true },
-  bank: { c: '#2f3f7a', sign: 'MAPLE BANK', up: 5, columns: true },
-  hotel: { c: '#7a2e3a', sign: 'GRAND LOTUS HOTEL', up: 12 },
-  airport: { c: '#3f8fb4', sign: 'CITY AIR TERMINAL', up: 1.6, glass: true, plane: true },
-  doctor: { c: '#e4efe9', sign: 'SUNRISE CLINIC', fg: '#c0392b', up: 3, cross: true },
-  shop: { c: '#cf5f82', sign: 'URBAN STYLE', up: 3, awning: ['#cf5f82', '#ffffff'] },
-  friend: { c: '#e39a4f', sign: 'HELLO CLUB · Meetup', up: 0, awning: ['#2f9e6e', '#ffffff'] },
-  coffee: { c: '#7d4f36', sign: 'BEAN & BREW Coffee', up: 3, awning: ['#2f6b4f', '#f3e9d8'] },
-  free: { c: '#7d68b8', sign: 'OPEN TALK Lounge', up: 0, garden: true },
+  interview: { c: '#5d7fa6', sign: '浦江科技 · NEXUS TECH Careers', neon: ['招聘中心', '#1f6fb2'], up: 9, glass: true },
+  accounting: { c: '#c9a43c', sign: '金账会计 · GOLDEN LEDGER', neon: ['会计事务所', '#b8860b'], up: 4 },
+  finance: { c: '#2c7a73', sign: '外滩投资 · HARBOR INVESTMENTS', neon: ['投资理财', '#1d6b5f'], up: 7, glass: true },
+  tax: { c: '#b85a45', sign: '税务局 · CITY TAX OFFICE', up: 3.5, columns: true },
+  bank: { c: '#2f3f7a', sign: '浦江银行 · MAPLE BANK', neon: ['银行', '#a11d1d'], up: 5, columns: true },
+  hotel: { c: '#7a2e3a', sign: '金莲大酒店 · GRAND LOTUS HOTEL', neon: ['大酒店', '#a11d1d'], up: 12, lanterns: true },
+  airport: { c: '#3f8fb4', sign: '城市航站楼 · CITY AIR TERMINAL', up: 1.6, glass: true, plane: true },
+  doctor: { c: '#e4efe9', sign: '仁和诊所 · SUNRISE CLINIC', fg: '#c0392b', up: 3, cross: true },
+  shop: { c: '#cf5f82', sign: '时尚服饰 · URBAN STYLE', neon: ['服装店', '#c2185b'], up: 3, awning: ['#cf5f82', '#ffffff'], lanterns: true },
+  friend: { c: '#e39a4f', sign: '你好俱乐部 · HELLO CLUB', neon: ['交友', '#2f9e6e'], up: 0, awning: ['#2f9e6e', '#ffffff'], lanterns: true },
+  coffee: { c: '#7d4f36', sign: '豆香咖啡 · BEAN & BREW Coffee', neon: ['咖啡馆', '#2f6b4f'], up: 3, awning: ['#2f6b4f', '#f3e9d8'] },
+  free: { c: '#7d68b8', sign: '自由谈 · OPEN TALK Lounge', neon: ['茶馆', '#6a4c9c'], up: 0, garden: true, lanterns: true },
 };
 
 export const roofOf = id => H + ((LOOK[id] && LOOK[id].up) || 0);   // the top of a practice building
@@ -120,6 +129,8 @@ export function Storefront({ id, wall, accent, full }) {
         {[-1.7, 1.7].map(x => <B key={x} p={[x, H - 0.03, 0]} s={[1.2, 0.02, 0.5]} c="#fffdf5" e="#fff6dc" ei={1} cast={false} />)}
       </>}
       {L.plane && <Plane p={[0.6, H + L.up + 1, -2.4]} />}
+      {L.neon && <Neon text={L.neon[0]} bg={L.neon[1]} p={[-X / 2 + 0.12, 2.0, oz + 0.55]} h={2.2} r={Math.PI / 2} />}
+      {L.lanterns && [-1, 1].map(k => <Lantern key={k} p={[k * (DOOR / 2 + 0.45), H - 0.75, oz + 0.4]} />)}
       {L.garden && full && [-2.5, 0, 2.5].map(x => <S key={x} p={[x, H + 0.5, -2]} r={0.6} c="#6f9f55" />)}
     </group>
   );
@@ -159,7 +170,7 @@ export function blockedCity(x, z) {
 // ---------------------------------------------------------------- streets
 // cars parked along the kerbs: [x, z, along x?]
 const PARKED = (() => {
-  const r = rnd(31), out = [], cols = ['#c0392b', '#2e86de', '#f5f6fa', '#222f3e', '#10ac84', '#f6b93b', '#8e44ad', '#e67e22'];
+  const r = rnd(31), out = [], cols = ['#45b5b0', '#2e86de', '#f5f6fa', '#222f3e', '#e3b23c', '#7f8c8d', '#8e44ad', '#c0392b'];
   ROADS_Z.forEach(z => ROADS_X.slice(0, -1).forEach(x0 => { if (r() < 0.45) out.push([x0 + P / 2 + (r() - 0.5) * 6, z + (r() < 0.5 ? -1 : 1) * 2.6, 1, cols[Math.floor(r() * 8)]]); }));
   ROADS_X.forEach(x => ROADS_Z.slice(0, -1).forEach(z0 => { if (r() < 0.35) out.push([x + (r() < 0.5 ? -1 : 1) * 2.6, z0 + P / 2 + (r() - 0.5) * 6, 0, cols[Math.floor(r() * 8)]]); }));
   return out;
@@ -195,7 +206,7 @@ function Streets() {
       if (['park', 'pitch', 'houses', 'market', 'tower', 'flats', 'lake', 'garden', 'playground', 'courts', 'plaza', 'shikumen', 'nanjing', 'yuyuan'].includes(id)) return;
       [-1, 1].forEach(k => out.push({ x: x + k * kerb, z: z - 3 }));
     });
-    return out.map((t, i) => ({ ...t, k: 0.62, pine: i % 4 === 3 }));
+    return out.map(t => ({ ...t, k: 0.62, plane: true }));
   }, []);
   return (
     <group>
@@ -218,19 +229,40 @@ function Streets() {
       {trees.map((t, i) => <Tree key={i} {...t} />)}
       {/* street lamps on the corners, and traffic lights at the crossroads */}
       {CELLS.map(({ r, c }) => <Lamp key={r + ':' + c} x={colX(c) + BLK / 2 - 0.4} z={rowZ(r) + BLK / 2 - 0.4} />)}
-      {ROADS_X.slice(1, -1).flatMap(x => ROADS_Z.slice(1, -1).map(z => <TrafficLight key={x + ':' + z} x={x - ROAD / 2 - 0.4} z={z + ROAD / 2 + 0.4} />))}
-      {PARKED.map(([x, z, along, c], i) => <Car key={i} x={x} z={z} c={c} r={along ? Math.PI / 2 : 0} />)}
+      {ROADS_X.slice(1, -1).flatMap((x, i) => ROADS_Z.slice(1, -1).map((z, j) => (
+        <TrafficLight key={x + ':' + z} x={x - ROAD / 2 - 0.4} z={z + ROAD / 2 + 0.4} ns={ROAD_NAMES_X[i + 1]} ew={ROAD_NAMES_Z[j + 1]} />
+      )))}
+      {PARKED.map(([x, z, along, c], i) => <Car key={i} x={x} z={z} c={c} r={along ? Math.PI / 2 : 0} taxi={TAXIS.includes(c)} />)}
       <Traffic />
     </group>
   );
 }
 
-function TrafficLight({ x, z }) {
+// a blue street-name plate, Chinese above and pinyin below, as on Shanghai's street corners
+function plate([zh, en]) {
+  return paint('road:' + zh, 256, 96, (g, w, h) => {
+    g.fillStyle = '#1f4e9c'; g.fillRect(0, 0, w, h);
+    g.strokeStyle = '#ffffff'; g.lineWidth = 4; g.strokeRect(6, 6, w - 12, h - 12);
+    g.fillStyle = '#ffffff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.font = '800 40px system-ui, sans-serif'; g.fillText(zh, w / 2, 38);
+    g.font = '600 20px system-ui, sans-serif'; g.fillText(en, w / 2, 74);
+  }, [1, 1]);
+}
+function Plate({ name, p, r }) {
+  const map = useMemo(() => plate(name), [name]);
+  return [0, Math.PI].map(k => (
+    <mesh key={k} position={p} rotation-y={r + k}><planeGeometry args={[1.3, 0.5]} /><meshStandardMaterial map={map} /></mesh>
+  ));
+}
+// ns, ew: the names of the street running north-south and east-west at this corner
+function TrafficLight({ x, z, ns, ew }) {
   return (
     <group position={[x, 0, z]}>
       <C p={[0, 1.6, 0]} r={0.06} h={3.2} c="#3a3f45" metal={0.5} seg={8} />
       <B p={[0, 3.3, 0]} s={[0.3, 0.85, 0.25]} c="#2b2f33" />
       {[['#e74c3c', 3.58], ['#f1c40f', 3.3], ['#2ecc71', 3.02]].map(([c, y]) => <S key={y} p={[0, y, 0.13]} r={0.09} c={c} e={c} />)}
+      {ns && <Plate name={ns} p={[0, 2.35, 0.72]} r={Math.PI / 2} />}
+      {ew && <Plate name={ew} p={[-0.72, 1.8, 0]} r={0} />}
     </group>
   );
 }
@@ -246,7 +278,8 @@ const LOOPS = [
   [[ROADS_X[0], ROADS_Z[Math.floor(NR / 2)]], [ROADS_X[NC], ROADS_Z[Math.floor(NR / 2)]], [ROADS_X[NC], ROADS_Z[Math.floor(NR / 2) + 1]], [ROADS_X[0], ROADS_Z[Math.floor(NR / 2) + 1]]],
   [[ROADS_X[Math.floor(NC / 2)], ROADS_Z[0]], [ROADS_X[Math.floor(NC / 2)], ROADS_Z[NR]], [ROADS_X[Math.floor(NC / 2) + 1], ROADS_Z[NR]], [ROADS_X[Math.floor(NC / 2) + 1], ROADS_Z[0]]],
 ];
-const PAINTS = ['#e74c3c', '#f1c40f', '#2e86de', '#ffffff', '#16a085', '#e67e22', '#8e44ad', '#2c3e50'];
+const TAXIS = ['#45b5b0', '#e3b23c'];                      // Shanghai's taxis: turquoise and gold
+const PAINTS = ['#45b5b0', '#f5f6fa', '#e3b23c', '#2c3e50', '#45b5b0', '#c0392b', '#e3b23c', '#7f8c8d'];
 const MOVERS = LOOPS.flatMap((_, li) => [0, 0.34, 0.67].map((off, k) => [li, off + li * 0.11, PAINTS[(li * 3 + k) % PAINTS.length]]));
 function Traffic() {
   const refs = useRef([]);
@@ -265,7 +298,7 @@ function Traffic() {
     });
   });
   return MOVERS.map(([, , c], i) => (
-    <group key={i} ref={el => { refs.current[i] = el; }} userData={{ live: true }}><Bake><Car x={0} z={0} c={c} /></Bake></group>
+    <group key={i} ref={el => { refs.current[i] = el; }} userData={{ live: true }}><Bake><Car x={0} z={0} c={c} taxi={TAXIS.includes(c)} /></Bake></group>
   ));
 }
 
