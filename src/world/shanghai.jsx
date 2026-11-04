@@ -20,7 +20,7 @@ export function layout(edgeX, edgeZ, far) {
     pearl: [rx + 28, -45], jinmao: [rx + 51, -35], swfc: [rx + 71, -48], tower: [rx + 64, -18],
     // other glass towers in Pudong: [x, z, height]
     towers: [[rx + 26, 20, 45], [rx + 26, 42, 30], [rx + 96, 18, 55], [rx + 112, 18, 40], [rx + 96, 40, 35], [rx + 112, 42, 50],
-             [rx + 101, -30, 60], [rx + 116, -55, 45], [rx + 98, -58, 38], [rx + 114, -20, 30], [rx + 28, -70, 28], [rx + 56, -70, 40]],
+             [rx + 101, -30, 60], [rx + 116, -55, 45], [rx + 98, -58, 38], [rx + 114, -20, 30], [rx + 28, -78, 28], [rx + 56, -78, 40]],
   };
 }
 
@@ -75,7 +75,9 @@ function Boats({ L }) {
   const boats = useMemo(() => [
     { kind: 'ferry', z: -40, speed: 0.25, off: 0 }, { kind: 'ferry', z: 55, speed: 0.2, off: 0.5 },
     { kind: 'barge', speed: 3, off: 0 }, { kind: 'barge', speed: 2.4, off: 0.45 },
+    { kind: 'cruise', speed: 2, off: 0.2 }, { kind: 'cruise', speed: 1.7, off: 0.7 },
   ], []);
+  const night = useContext(Night);
   useFrame(({ clock }) => {
     const t = clock.elapsedTime;
     boats.forEach((b, i) => {
@@ -85,13 +87,20 @@ function Boats({ L }) {
         g.position.set(L.west + 4 + u * (L.rw - 8), 0, b.z); g.rotation.y = Math.PI / 2;
       } else {
         const len = L.far - L.north, s = ((t * b.speed / len + b.off) % 1) * len;
-        g.position.set(L.rx + (i % 2 ? 6 : -6), 0, i % 2 ? L.north + 6 + s : L.far - s); g.rotation.y = i % 2 ? 0 : Math.PI;
+        g.position.set(L.rx + (i % 2 ? 6 : -6) * (b.kind === 'cruise' ? 0.4 : 1), 0, i % 2 ? L.north + 6 + s : L.far - s); g.rotation.y = i % 2 ? 0 : Math.PI;
       }
     });
   });
   return boats.map((b, i) => (
     <group key={i} ref={el => { refs.current[i] = el; }} userData={{ live: true }}><Bake>
-      {b.kind === 'ferry' ? <>
+      {b.kind === 'cruise' ? <>
+        <B p={[0, 0.45, 0]} s={[4, 0.9, 13]} c="#f4f1ea" />
+        <B p={[0, 1.4, 0]} s={[3.4, 1.2, 10]} c="#ffffff" />
+        <B p={[0, 1.45, 0]} s={[3.44, 0.5, 9.4]} c={night ? '#ffd98a' : '#2c3e50'} {...(night ? { e: '#ffc46b', ei: 1 } : {})} cast={false} />
+        <B p={[0, 2.35, 0]} s={[3, 0.8, 7]} c="#ffffff" />
+        <B p={[0, 2.4, 0]} s={[3.04, 0.35, 6.4]} c={night ? '#9fe0ff' : '#2c3e50'} {...(night ? { e: '#6fd0ff', ei: 1 } : {})} cast={false} />
+        <B p={[0, 2.9, -1]} s={[1.6, 0.3, 2]} c="#c0392b" />
+      </> : b.kind === 'ferry' ? <>
         <B p={[0, 0.35, 0]} s={[3.2, 0.7, 9]} c="#f4f4f0" />
         <B p={[0, 0.72, 0]} s={[3.3, 0.06, 9.1]} c="#2a6f97" cast={false} />
         <B p={[0, 1.4, 0]} s={[2.6, 1.3, 6]} c="#ffffff" />
@@ -104,6 +113,58 @@ function Boats({ L }) {
       </>}
     </Bake></group>
   ));
+}
+
+// ---------------------------------------------------------------- moving things
+// a train that runs back and forth along x on a viaduct: from x0 to x1 at height y, at z
+function Shuttle({ x0, x1, y, z, speed, cars, nose, body, stripe }) {
+  const g = useRef(), len = x1 - x0;
+  useFrame(({ clock }) => {
+    if (!g.current) return;
+    const u = (clock.elapsedTime * speed / len) % 2, k = u < 1 ? u : 2 - u;   // there and back
+    g.current.position.x = x0 + 6 + k * (len - 12 - cars * 6);
+  });
+  return (
+    <group ref={g} position={[x0, y, z]} userData={{ live: true }}><Bake>
+      {Array.from({ length: cars }, (_, i) => <group key={i} position={[i * 6.2, 0, 0]}>
+        <B p={[0, 1.2, 0]} s={[6, 2.2, 2.6]} c={body} metal={0.3} rough={0.3} />
+        <B p={[0, 1.55, 0]} s={[5.4, 0.6, 2.64]} c="#253040" rough={0.15} />
+        <B p={[0, 0.55, 0]} s={[6, 0.25, 2.62]} c={stripe} />
+      </group>)}
+      {nose && [-1, 1].map(k => <mesh key={k} position={[k < 0 ? -3.6 : (cars - 1) * 6.2 + 3.6, 1.2, 0]} rotation-z={k * Math.PI / 2} castShadow>
+        <coneGeometry args={[1.25, 1.6, 12]} /><meshStandardMaterial color={body} metalness={0.3} roughness={0.3} />
+      </mesh>)}
+    </Bake></group>
+  );
+}
+// a viaduct along x: a deck on round pillars
+function Viaduct({ x0, x1, y, z, w = 4 }) {
+  const n = Math.floor((x1 - x0) / 18);
+  return (
+    <group>
+      <B p={[(x0 + x1) / 2, y - 0.35, z]} s={[x1 - x0, 0.7, w]} c="#d9d6cf" />
+      <B p={[(x0 + x1) / 2, y + 0.02, z]} s={[x1 - x0, 0.06, w - 1.2]} c="#8d9298" cast={false} />
+      {Array.from({ length: n + 1 }, (_, i) => <C key={i} p={[x0 + 4 + i * (x1 - x0 - 8) / n, (y - 0.7) / 2, z]} r={0.55} h={y - 0.7} c="#cfccc4" seg={10} />)}
+    </group>
+  );
+}
+// a plane crossing the sky now and then, on its way to the airport
+function Plane() {
+  const g = useRef();
+  useFrame(({ clock }) => {
+    if (!g.current) return;
+    const u = (clock.elapsedTime / 70) % 1;
+    g.current.position.set(-320 + u * 640, 70 + u * -25, -140 + u * 120); g.current.visible = u < 0.98;
+  });
+  return (
+    <group ref={g} rotation-y={Math.PI / 2 - 0.18} userData={{ live: true }}><Bake>
+      <C p={[0, 0, 0]} r={1.3} h={16} rx={Math.PI / 2} c="#f4f6f8" seg={12} />
+      <B p={[0, -0.2, 0.5]} s={[22, 0.3, 3]} c="#e4e8ec" />
+      <B p={[0, 0.2, -7]} s={[7, 0.25, 1.8]} c="#e4e8ec" />
+      <B p={[0, 2.2, -7]} s={[0.3, 4, 2]} c="#c0392b" />
+      <S p={[0, 0, 8]} r={1.3} c="#f4f6f8" />
+    </Bake></group>
+  );
 }
 
 // ---------------------------------------------------------------- Lujiazui's landmarks
@@ -218,6 +279,12 @@ export function Shanghai({ edgeX, edgeZ, far, road }) {
         <planeGeometry args={[3.6, 0.7]} /><meshStandardMaterial map={signTexture('外滩 · THE BUND', '#7a1f1f', '#ffe08a')} />
       </mesh>
       <Bridge L={L} road={road} />
+      {/* metro line 2 on a viaduct from the Bund over the river to Lujiazui, and the maglev out east */}
+      <Viaduct x0={edgeX + road / 2 + 1} x1={L.rx + 40} y={9} z={-24} />
+      <Shuttle x0={edgeX + road / 2 + 1} x1={L.rx + 40} y={9} z={-24} speed={7} cars={4} body="#f2f4f5" stripe="#8bc34a" />
+      <Viaduct x0={L.east + 4} x1={far - 10} y={6} z={-65} w={3.6} />
+      <Shuttle x0={L.east + 4} x1={far - 10} y={6} z={-65} speed={28} cars={3} nose body="#f7f7f7" stripe="#1f6fb2" />
+      <Plane />
       <Boats L={L} />
       {/* Pudong: a paved riverside, avenues north to south, a round park, and the towers */}
       <B p={[L.east + 3.5, 0.04, (L.north + 10 + 60) / 2]} s={[6, 0.04, 60 - L.north - 10]} c="#d9d0bf" cast={false} />
