@@ -59,8 +59,8 @@ export default async function handler(req) {
       aiAt: Number(b.aiAt) || 0,
       turns: Math.max(0, Math.min(999, Number(b.turns) || 0)),
       free: !!b.free,                                 // walking around by themselves: x, z is where they stand
-      x: Math.max(-80, Math.min(80, Math.round((Number(b.x) || 0) * 100) / 100)),
-      z: Math.max(-80, Math.min(80, Math.round((Number(b.z) || 0) * 100) / 100)),
+      x: Math.max(-250, Math.min(250, Math.round((Number(b.x) || 0) * 100) / 100)),
+      z: Math.max(-250, Math.min(250, Math.round((Number(b.z) || 0) * 100) / 100)),
     };
     await redis(['HSET', KEY, id, JSON.stringify(u)], ['EXPIRE', KEY, 3600]);
     return json({ ok: true });
