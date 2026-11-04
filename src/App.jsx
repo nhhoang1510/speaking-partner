@@ -6,6 +6,7 @@ import { SCENES, LEVELS } from './scenes.js';
 import { Room, COLORS, loadMe, saveMe } from './lib/room.js';
 import { loadHistory, saveSession, deleteSession, snapshot, memoryFor, progress, stars, notebook, loadKnown, saveKnown } from './lib/history.js';
 import { Listener, voiceFor } from './lib/listen.js';
+import { today, loadDone, saveDone, said, note } from './lib/challenge.js';
 
 // the whole app is the 3D school; panels float around it
 const School = lazy(() => import('./School.jsx'));
@@ -81,6 +82,9 @@ export default function App() {
   const [right, setRight] = useState('feed');         // right panel when not in a conversation: 'feed' | 'history' | a past session
   const [history, setHistory] = useState(loadHistory);
   const prog = useMemo(progress, [history]);
+  // the daily challenge: today's room and phrases, ticked off as I say them there
+  const challenge = useMemo(() => today(SCENES.map(s => s.id)), [new Date().getDate()]);
+  const [done, setDone] = useState(() => loadDone(challenge.day));
   const [walk, setWalk] = useState(false);             // "hoá thân": I walk my own character around
   const [walkRoom, setWalkRoom] = useState(null);      // the room I'm standing in while walking
   const stick = useRef({});                            // the on-screen joystick, read by the 3D scene
@@ -188,7 +192,16 @@ export default function App() {
     { ...meLocal, ...status, ts: Date.now() },
   ], [online.users, meLocal.id, meLocal.name, meLocal.color, status]);
 
-  const start = sc => { listener.stop(); eng.start(sc, memoryFor(sc.id, history)); };
+  useEffect(() => {
+    if (!s.scene || s.scene.id !== challenge.scene) return;
+    const got = said(challenge, s.msgs.filter(m => m.who === 'me' && !m.interim).map(m => m.text));
+    if (got.some(i => !done.includes(i))) { const n = [...new Set([...done, ...got])].sort(); setDone(n); saveDone(challenge.day, n); }
+  }, [s.msgs, s.scene]);
+  const start = sc => {
+    listener.stop();
+    const mem = memoryFor(sc.id, history), extra = sc.id === challenge.scene && done.length < challenge.phrases.length ? note(challenge) : '';
+    eng.start(sc, [mem, extra].filter(Boolean).join('\n\n'));
+  };
   const pick = sc => { setSheet(null); setWalk(false); if (!s.scene || s.scene.id !== sc.id) start(sc); };
   // back to the whole school: out of the room, out of first person, camera back to the overview
   const leave = () => { eng.leave(); setWalk(false); setSheet(null); setView({ fit: 1, n: view.n + 1 }); };
@@ -221,8 +234,10 @@ export default function App() {
         </aside>
 
         <aside className="panel right" aria-label={s.scene ? 'Hội thoại' : 'Hoạt động'}>
-          {s.scene ? <Talk s={s} eng={eng} cfg={cfg} onClose={leave} />
-            : right === 'feed' ? <Feed feed={feed} ai={ai} tabs={<RightTabs right={right} setRight={setRight} />} />
+          {s.scene ? <Talk s={s} eng={eng} cfg={cfg} onClose={leave}
+              top={s.scene.id === challenge.scene ? <Challenge ch={challenge} done={done} inRoom /> : null} />
+            : right === 'feed' ? <Feed feed={feed} ai={ai} tabs={<RightTabs right={right} setRight={setRight} />}
+                top={<Challenge ch={challenge} done={done} onGo={() => pick(SCENE[challenge.scene])} />} />
             : right === 'notes' ? <Notebook history={history} tabs={<RightTabs right={right} setRight={setRight} />}
                 onSay={t => { listener.stop(); listener.unlock(); listener.say(t, 'hannah'); }} />
             : right === 'history' ? <History history={history} prog={prog} tabs={<RightTabs right={right} setRight={setRight} />} onOpen={setRight}
@@ -359,10 +374,29 @@ function RightTabs({ right, setRight }) {
   );
 }
 
-function Feed({ feed, ai, tabs }) {
+// today's challenge: the room, the three phrases with ticks, and a way in
+function Challenge({ ch, done, onGo, inRoom }) {
+  const sc = SCENE[ch.scene], all = done.length >= ch.phrases.length;
+  return (
+    <div className={'challenge' + (all ? ' all' : '')} style={{ '--h': sc.hue }}>
+      <div className="ch-head">
+        <b>{all ? 'Xong thử thách hôm nay!' : inRoom ? 'Thử thách: dùng các cụm này' : 'Thử thách hôm nay'}</b>
+        <span>{done.length}/{ch.phrases.length}</span>
+      </div>
+      {!inRoom && !all && <p>Vào phòng <b>{sc.title}</b> và dùng được 3 cụm sau khi nói chuyện với {sc.name}:</p>}
+      <ul>
+        {ch.phrases.map((p, i) => <li key={i} className={done.includes(i) ? 'ok' : ''}><i>{done.includes(i) ? '✓' : ''}</i>{p.show}</li>)}
+      </ul>
+      {!inRoom && !all && <button className="primary" onClick={onGo}>Vào {sc.title}</button>}
+    </div>
+  );
+}
+
+function Feed({ feed, ai, tabs, top }) {
   return (
     <section className="glass sec feed">
       {tabs}
+      {top}
       {(ai.state === 'down' || ai.state === 'nomodel') && (
         <p className="notice">{LOCAL ? <>AI chưa chạy trên máy này — chạy <code>./start.sh</code> rồi tải lại trang.</> : 'Chưa kết nối được tới AI. Kiểm tra mạng rồi tải lại trang.'}</p>
       )}
@@ -557,7 +591,7 @@ function ViewBar({ view, setView, sheet, setSheet, onWalk }) {
 }
 
 // ---------------------------------------------------------------- conversation
-function Talk({ s, eng, cfg, onClose }) {
+function Talk({ s, eng, cfg, onClose, top }) {
   const chatRef = useRef(null);
   useEffect(() => { const c = chatRef.current; if (c) c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' }); }, [s.msgs.length, s.msgs[s.msgs.length - 1]?.text, s.summary]);
   const sc = s.scene;
@@ -571,6 +605,7 @@ function Talk({ s, eng, cfg, onClose }) {
         </div>
         <button className="close-room" onClick={onClose} aria-label="Rời phòng, về toàn cảnh" title="Về toàn cảnh">✕</button>
       </div>
+      {top}
       <div className="chat" ref={chatRef} aria-live="polite">
         <AnimatePresence initial={false}>
           {s.msgs.map(m => <Msg key={m.id} m={m} eng={eng} showAi={cfg.showAi} />)}

@@ -497,3 +497,19 @@ html, body, #root { height: 100%; overflow: hidden; }
 .nb-t s { color: var(--muted); font-size: 12.5px; }
 .nb-t span { font-size: 12.5px; color: var(--muted); }
 .nb-t small { font-size: 11px; color: var(--muted); opacity: .8; }
+
+/* ---------------------------------------------------------------- daily challenge */
+.challenge { border-radius: 16px; padding: 11px 12px; margin-bottom: 10px; background: hsl(var(--h) 60% 50% / .12);
+  border: 1px solid hsl(var(--h) 50% 45% / .25); display: grid; gap: 6px; font-size: 13px; }
+.challenge.all { background: color-mix(in srgb, var(--ok) 14%, transparent); border-color: color-mix(in srgb, var(--ok) 35%, transparent); }
+.ch-head { display: flex; justify-content: space-between; align-items: baseline; }
+.ch-head span { font: 700 12px var(--sans); color: var(--muted); }
+.challenge p { margin: 0; color: var(--muted); }
+.challenge ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; overflow: visible; }
+.challenge li { display: flex; gap: 8px; align-items: center; font-weight: 600; }
+.challenge li i { width: 18px; height: 18px; flex: none; border-radius: 50%; border: 1.5px solid hsl(var(--h) 40% 45% / .5); display: grid; place-items: center;
+  font: 700 11px var(--sans); font-style: normal; color: #fff; }
+.challenge li.ok i { background: var(--ok); border-color: var(--ok); }
+.challenge li.ok { color: var(--muted); text-decoration: line-through; }
+.challenge .primary { justify-self: start; padding: 7px 14px; font-size: 13px; }
+.talk .challenge { margin: 0 0 8px; }
