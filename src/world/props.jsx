@@ -269,12 +269,13 @@ function Desk({ p, w = 2.2, d = 1, c = '#7c5a43', r = 0 }) {
 // ---------------------------------------------------------------- floors
 const FLOORS = { coffee: 'wood', interview: 'carpet', hotel: 'tile-check', airport: 'tile-big', doctor: 'tile-blue', shop: 'wood-light', friend: 'wood', free: 'carpet',
   accounting: 'carpet', finance: 'wood', tax: 'tile', bank: 'tile-big' };
-export function RoomFloor({ id, hue, w, d, bright, ...events }) {
+// a room's floor: a w x d rectangle, or any flat `geometry` with 0..1 UVs (an open-plan area's rounded island)
+export function RoomFloor({ id, hue, w, d, geometry, bright, ...events }) {
   const kind = FLOORS[id] === 'carpet' ? `carpet:${hue}` : FLOORS[id];
   const map = useMemo(() => floorTexture(kind, kind.startsWith('tile-big') ? [2, 2] : kind.startsWith('tile') ? [2.5, 2.5] : [2, 2]), [kind]);
   return (
-    <mesh rotation-x={-Math.PI / 2} position={[0, 0.02, 0]} receiveShadow {...events}>
-      <planeGeometry args={[w, d]} />
+    <mesh rotation-x={-Math.PI / 2} position={[0, 0.02, 0]} receiveShadow geometry={geometry} {...events}>
+      {!geometry && <planeGeometry args={[w, d]} />}
       <meshStandardMaterial map={map} color={bright ? hsl(hue, 70, 92) : '#ffffff'} roughness={kind.startsWith('tile') ? 0.4 : 0.85} />
     </mesh>
   );
@@ -552,35 +553,4 @@ export function Furniture({ id, hue, north }) {
         <Pendant p={[0, 2.7, 1]} c={deep} />
       </group>);
   }
-}
-
-// ---------------------------------------------------------------- the corridor
-export function CorridorDecor({ x0, x1, hall }) {
-  const lockers = [];
-  for (let x = x0 + 1.2; x < x1 - 1; x += 7) {
-    // lockers against the north corridor wall, between the doors
-    for (let k = 0; k < 3; k++) lockers.push(
-      <group key={x + ':' + k} position={[x + k * 0.5, 0, -hall + 0.25]}>
-        <B p={[0, 0.85, 0]} s={[0.46, 1.7, 0.4]} c={['#5b8def', '#4a7bd8', '#6a99f0'][k]} metal={0.4} rough={0.4} />
-        <B p={[0.15, 1.1, 0.205]} s={[0.04, 0.12, 0.01]} c="#ddd" cast={false} />
-        {[1.5, 1.45, 1.4].map(y => <B key={y} p={[0, y, 0.205]} s={[0.3, 0.015, 0.01]} c="#2d4f9b" cast={false} />)}
-      </group>
-    );
-  }
-  return (
-    <group>
-      {lockers}
-      {Array.from({ length: Math.round((x1 - x0) / 7) - 1 }, (_, k) => x0 + 7 + k * 7).map(x => (
-        <group key={x} position={[x, 0, hall - 0.35]}>
-          <B p={[0, 0.42, 0]} s={[1.6, 0.06, 0.4]} c="#a0704a" />
-          {[-0.7, 0.7].map(dx => <B key={dx} p={[dx, 0.2, 0]} s={[0.06, 0.4, 0.36]} c="#555" />)}
-        </group>
-      ))}
-      <group position={[x0 + 12.8, 1.6, -hall + 0.12]}>
-        <B p={[0, 0, 0]} s={[1.4, 0.9, 0.04]} c="#b5835a" cast={false} />
-        {[[-0.35, 0.15, '#ffd166'], [0.2, 0.2, '#9be3c4'], [-0.15, -0.2, '#f4a6a0'], [0.4, -0.15, '#cfe3ff']].map(([x, y, c]) => <B key={x} p={[x, y, 0.03]} s={[0.36, 0.3, 0.01]} c={c} cast={false} />)}
-      </group>
-      {Array.from({ length: Math.round((x1 - x0) / 7) }, (_, k) => x0 + 3.5 + k * 7).map(x => <Pendant key={x} p={[x, 2.6, 0]} c="#e9e2d6" />)}
-    </group>
-  );
 }

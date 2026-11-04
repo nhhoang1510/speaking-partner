@@ -43,7 +43,7 @@ function tex(kind, repeat) {
 }
 
 // one mesh drawn many times (fence posts, flowers, tree trunks...)
-function Many({ at, geo, c, cast = true, e }) {
+export function Many({ at, geo, c, cast = true, e }) {
   const ref = useRef();
   useLayoutEffect(() => {
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3();
