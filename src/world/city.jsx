@@ -19,7 +19,7 @@ import { Outskirts } from './outskirts.jsx';
 import { Highway, blockedHighway } from './highway.jsx';
 import { Shanghai, blockedShanghai } from './shanghai.jsx';
 
-const FAR = 260;                                             // the countryside reaches this far out
+export const FAR = 260;                                             // the countryside reaches this far out
 
 const LAYOUT = [
   ['shikumen', 'garden', 'pitch', 'offices', 'station', 'offices', 'shops', 'houses', 'shikumen'],
