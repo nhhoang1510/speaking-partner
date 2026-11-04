@@ -12,7 +12,7 @@ export const CX = (X0 + BX) / 2, LEN = BX - X0;
 export const ROOM_XS = Array.from({ length: COLS }, (_, k) => X0 + (BX - X0) * (k + 0.5) / COLS);   // window bays along the long walls
 
 // ---------------------------------------------------------------- textures
-function tex(kind, repeat) {
+export function tex(kind, repeat) {
   return paint(kind, 256, 256, (g, w, h) => {
     const r = rnd(kind.length * 131 + 7);
     if (kind === 'grass') {
@@ -176,7 +176,7 @@ export function blockedOutside(x, z) {
   return false;
 }
 
-function Tree({ x, z, k, pine }) {
+export function Tree({ x, z, k, pine }) {
   return (
     <group position={[x, 0, z]} scale={k}>
       <C p={[0, 0.9, 0]} r={0.16} r2={0.22} h={1.8} c="#7a5236" seg={8} />
@@ -191,7 +191,7 @@ function Tree({ x, z, k, pine }) {
   );
 }
 
-function Car({ x, z, c, r = 0 }) {
+export function Car({ x, z, c, r = 0 }) {
   return (
     <group position={[x, 0, z]} rotation-y={r}>
       <B p={[0, 0.55, 0]} s={[1.75, 0.6, 4.1]} c={c} metal={0.5} rough={0.3} />
@@ -204,7 +204,7 @@ function Car({ x, z, c, r = 0 }) {
   );
 }
 
-function Lamp({ x, z }) {
+export function Lamp({ x, z }) {
   return (
     <group position={[x, 0, z]}>
       <C p={[0, 1.6, 0]} r={0.05} h={3.2} c="#3a3f45" metal={0.6} seg={8} />
@@ -214,7 +214,7 @@ function Lamp({ x, z }) {
   );
 }
 
-function Bench({ x, z, r = 0 }) {
+export function Bench({ x, z, r = 0 }) {
   return (
     <group position={[x, 0, z]} rotation-y={r}>
       {[0, 0.13, 0.26].map(dz => <B key={dz} p={[0, 0.45, dz - 0.13]} s={[1.6, 0.05, 0.1]} c="#a8744b" />)}
@@ -396,7 +396,7 @@ function Fence() {
   );
 }
 
-function Clouds() {
+export function Clouds() {
   const puffs = useMemo(() => {
     const r = rnd(9), out = [];
     for (let c = 0; c < 12; c++) {
