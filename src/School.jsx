@@ -1,26 +1,27 @@
-// The school, in 3D: a corridor with eight practice rooms, one per scene, each furnished for its situation
-// and staffed by that scene's AI character. Every learner online is a little character: they wait in the
-// corridor, walk into the room they practise in, and show what they are doing and saying.
-// Seen from above at an angle, with the near walls cut low so every room is visible (a doll's house view).
+// The school, in 3D: one open hall with a practice area per scene along a winding promenade, each furnished
+// for its situation and staffed by that scene's AI character. Every learner online is a little character: they
+// wait on the promenade, walk into the area they practise in, and show what they are doing and saying.
+// Seen from above at an angle, with the near outer walls cut low so every area is visible.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Html, OrbitControls, PerspectiveCamera, Sky } from '@react-three/drei';
 import * as THREE from 'three';
 import { SCENES } from './scenes.js';
-import { B, C, S, floorTexture, Furniture, RoomFloor, Window, CorridorDecor, hsl } from './world/props.jsx';
+import { B, Furniture, RoomFloor, Window, hsl } from './world/props.jsx';
 import { Person } from './world/people.jsx';
 import { Bake } from './world/bake.jsx';
 import { Campus, Shell, blockedOutside, COLS, X0, BX, BZ, CX, LEN, FENCE, GATE } from './world/campus.jsx';
+import { Area, Promenade, blockedInside, islandGeometry, pathZ, ZA, ZB, ZC } from './world/open.jsx';
 
 const MOBILE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 const SAID_SHOW_MS = 12000;
 const ENTRANCE = new THREE.Vector3(17, 0, 0);
-const ROOM_W = 7, ROOM_D = 7.5, HALL = 1.5;          // room size; the corridor runs along x, |z| < HALL
-const TALL = 2.4, PART = 0.9, LOW = 0.35;             // far outer walls, partitions, near walls
+const ROOM_W = 7;                                     // one area per 7 m of hall, on each side of the promenade
+const TALL = 2.4, LOW = 0.35;                         // far outer walls, near walls
 
-// rooms: four north of the corridor, four south; `in` is the direction from the room to the corridor
+// areas: six north of the promenade, six south, each opening towards it (local +z points at the promenade)
 export const ROOMS = Object.fromEntries(SCENES.map((sc, i) => {
-  const north = i < COLS, col = i % COLS, x = X0 + ROOM_W / 2 + col * ROOM_W, z = north ? -(HALL + ROOM_D / 2) : HALL + ROOM_D / 2;
+  const north = i < COLS, col = i % COLS, x = X0 + ROOM_W / 2 + col * ROOM_W, z = north ? -ZC : ZC;
   return [sc.id, { scene: sc, i, col, north, pos: new THREE.Vector3(x, 0, z), rot: north ? 0 : Math.PI }];
 }));
 
@@ -35,11 +36,11 @@ export function describe(u) {
   }[u.phase] || `Đang luyện ${sc.title}`;
 }
 
-// walking freely: where one may stand (the corridor, inside a room, or in a doorway between them)
+// walking freely: anywhere in the hall except through columns, trees and screens; an area counts as entered
+// once I'm on its floor
 const ROOM_LIST = Object.values(ROOMS);
 export function roomAt(x, z) {
-  return ROOM_LIST.find(r => (z < 0) === r.north && Math.abs(x - r.pos.x) < ROOM_W / 2 - 0.35 &&
-                             Math.abs(z) > HALL + 0.12 && Math.abs(z) < HALL + ROOM_D - 0.35) || null;
+  return ROOM_LIST.find(r => Math.abs(x - r.pos.x) < ZA - 0.3 && Math.abs(z - r.pos.z) < ZB - 0.3) || null;
 }
 function canStand(x, z) {
   // outside: anywhere on the grounds inside the fence (and out through the gate to the street)
@@ -47,16 +48,13 @@ function canStand(x, z) {
     const inFence = x > FENCE.x0 + 0.4 && z > FENCE.z0 + 0.4 && z < FENCE.z1 - 0.4 && (x < FENCE.x1 - 0.4 || (Math.abs(z) < GATE - 0.3 && x < 47));
     return inFence && !blockedOutside(x, z);
   }
-  if (x < BX + 0.45 && x > X0 + 0.4 && Math.abs(z) < HALL - 0.25) return true;   // corridor, and the front door
-  if (roomAt(x, z)) return true;
-  return Math.abs(z) < HALL + 0.3 && ROOM_LIST.some(r => Math.abs(x - r.pos.x) < 0.7);
+  const hall = x > X0 + 0.4 && x < BX - 0.35 && Math.abs(z) < BZ - 0.4, door = x < BX + 0.45 && x > BX - 1 && Math.abs(z) < 1.25;
+  return (hall || door) && !blockedInside(x, z, ROOM_LIST);
 }
 
-// first person: show a label only for what is near and on my side of the walls (same room, or both in the corridor)
+// first person: show a label only for who is near (the hall is open, so near is enough)
 function seen(viewer, x, z, range = 9) {
   if (!viewer || !viewer.on) return true;
-  const a = roomAt(viewer.pos.x, viewer.pos.z), b = roomAt(x, z);
-  if ((a && a.scene.id) !== (b && b.scene.id)) return false;
   return Math.hypot(viewer.pos.x - x, viewer.pos.z - z) < range;
 }
 
@@ -83,7 +81,9 @@ function Npc({ room, busy }) {
   );
 }
 
-const doorX = x => Math.round((x - X0 - ROOM_W / 2) / ROOM_W) * ROOM_W + X0 + ROOM_W / 2;
+// where an area opens onto the promenade
+const mouth = r => new THREE.Vector3(r.pos.x, 0, r.pos.z + (r.north ? 1 : -1) * (ZB + 0.25));
+const local = (r, x, z) => new THREE.Vector3(x, 0, z).applyAxisAngle(new THREE.Vector3(0, 1, 0), r.rot).add(r.pos);
 
 function Learner({ u, target, me, now, pilot, viewer }) {
   const g = useRef(), body = useRef(), ring = useRef(), tag = useRef(), act = useRef({});
@@ -93,7 +93,7 @@ function Learner({ u, target, me, now, pilot, viewer }) {
   useFrame(({ clock }, dt) => {
     if (!g.current) return;
     if (pilot && pilot.on) { drive(pilot, pos.current, g.current, clock.elapsedTime, dt); last.current = null; return; }
-    // walk via the corridor: out of the old room's door, along the corridor, in through the new door
+    // walk via the promenade: out of the old area's open side, along the promenade, in through the new one's
     // others walking by themselves: straight to where they last reported standing
     const free = u.free && !me;
     const goalPos = free ? new THREE.Vector3(u.x, 0, u.z) : target;
@@ -101,9 +101,10 @@ function Learner({ u, target, me, now, pilot, viewer }) {
       last.current = goalPos.clone();
       const p = pos.current, pts = [];
       if (!free) {
-        if (Math.abs(p.z) > HALL) pts.push(new THREE.Vector3(doorX(p.x), 0, 0));
-        if (p.x > 14) pts.push(new THREE.Vector3(13, 0, 0));
-        if (Math.abs(goalPos.z) > HALL) pts.push(new THREE.Vector3(doorX(goalPos.x), 0, 0));
+        const from = roomAt(p.x, p.z), to = roomAt(goalPos.x, goalPos.z);
+        if (from) pts.push(mouth(from));
+        if (p.x > BX - 1) pts.push(new THREE.Vector3(BX - 1, 0, 0));
+        if (to && to !== from) pts.push(mouth(to));
       }
       pts.push(goalPos.clone());
       path.current = pts;
@@ -122,7 +123,7 @@ function Learner({ u, target, me, now, pilot, viewer }) {
     }
     if (!walking) {                                   // face the room's character, or across the corridor
       const r = u.scene && ROOMS[u.scene];
-      const look = r ? r.pos.clone().add(new THREE.Vector3(0, 0, r.north ? -2.3 : 2.3)) : new THREE.Vector3(p.x, 0, p.z > 0 ? -3 : 3);
+      const look = r ? local(r, 0, -2.3) : new THREE.Vector3(p.x, 0, p.z > 0 ? -3 : 3);
       const want = Math.atan2(look.x - p.x, look.z - p.z);
       let d = want - g.current.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d));
       g.current.rotation.y += d * Math.min(1, dt * 5);
@@ -165,9 +166,9 @@ const step = new THREE.Vector3();
 function drive(pilot, p, g, t, dt) {
   const k = pilot.input;
   if (pilot.fresh) {
-    // just stepped into my character: stand somewhere legal and look out of the room / down the hall
+    // just stepped into my character: stand somewhere legal and look out of the area / down the hall
     pilot.fresh = false;
-    if (!canStand(p.x, p.z)) { p.x = Math.max(-12, Math.min(12, p.x)); p.z = 0; }
+    if (!canStand(p.x, p.z)) { p.x = Math.max(-12, Math.min(12, p.x)); p.z = pathZ(p.x); }
     const r = roomAt(p.x, p.z);
     pilot.yaw = pilot.wantYaw = r ? (r.pos.z < 0 ? Math.PI : 0) : (p.x > 0 ? Math.PI / 2 : -Math.PI / 2);
     pilot.wantPitch = pilot.pitch;
@@ -230,81 +231,37 @@ function FirstPerson({ pilot }) {
 }
 
 // ---------------------------------------------------------------- the building
-// every room has its own paint: a feature colour on the back wall, a lighter one on the others,
-// with a dark skirting board and a thin picture rail in the feature colour
+// every area has its own colours: a feature colour for its rim and screen, a lighter one for its bench
 const PAINT = {
   friend: ['#f7dfb4', '#e39a4f'], coffee: ['#efd3bd', '#7d4f36'], interview: ['#dde5ee', '#34506f'],
   hotel: ['#f0e4c9', '#7a2e3a'], airport: ['#e2edf2', '#3f8fb4'], doctor: ['#e1f2ea', '#5fae8f'],
   shop: ['#f8dfe6', '#cf5f82'], free: ['#e8e1f5', '#7d68b8'],
   accounting: ['#f6efd2', '#b8952e'], finance: ['#dcefeb', '#1f6f68'], tax: ['#f4e1dc', '#a8432f'], bank: ['#e1e6f4', '#2f3f7a'],
 };
-const DOOR = 1.8;
-function Paint({ room, full }) {
-  const [wall, accent] = PAINT[room.scene.id] || ['#efe5d6', '#b9a68b'];
-  const { north, i } = room;
-  // how high each wall really is from above (walking, all are full height); "left/right" are seen from the corridor
-  const westOuter = room.col === 0, eastOuter = room.col === COLS - 1;
-  const hBack = full ? 2.8 : north ? TALL : LOW, hFront = full ? 2.8 : north ? LOW : PART;
-  const side = outer => (full ? 2.8 : outer === 'w' ? TALL : outer === 'e' ? LOW : PART);
-  // local +x is world +x for north rooms, world -x for south ones
-  const hL = side(north ? (westOuter ? 'w' : '') : (eastOuter ? 'e' : ''));
-  const hR = side(north ? (eastOuter ? 'e' : '') : (westOuter ? 'w' : ''));
-  const W = ROOM_W, D = ROOM_D, f = 0.02;
-  const back = -D / 2 + 0.125 + f / 2, front = D / 2 - 0.1 - f / 2;
-  const sx = W / 2 - (westOuter || eastOuter ? 0.1 : 0.1) - f / 2;
-  const panel = (key, x, z, w, h, c, rot = 0) => h > 0.05 && (
-    <group key={key} position={[x, 0, z]} rotation-y={rot}>
-      <B p={[0, h / 2, 0]} s={[w, h - 0.01, f]} c={c} cast={false} />
-      <B p={[0, 0.06, 0.015]} s={[w, 0.12, 0.02]} c="#5b4636" cast={false} />
-      {h > 1.4 && <B p={[0, 1.15, 0.012]} s={[w, 0.05, 0.02]} c={c === accent ? '#ffffff' : accent} cast={false} />}
-    </group>
-  );
-  const seg = (W - DOOR) / 2;
-  return (
-    <group>
-      {panel('b', 0, back, W - 0.24, hBack, accent)}
-      {panel('l', -sx, 0, D - 0.24, hL, wall, Math.PI / 2)}
-      {panel('r', sx, 0, D - 0.24, hR, wall, -Math.PI / 2)}
-      {panel('f1', -(DOOR / 2 + seg / 2), front, seg - 0.12, hFront, wall, Math.PI)}
-      {panel('f2', DOOR / 2 + seg / 2, front, seg - 0.12, hFront, wall, Math.PI)}
-      {/* door frame and a name plate beside the door, on the corridor side */}
-      {full && [-1, 1].map(k => <B key={k} p={[k * (DOOR / 2 + 0.04), 1.15, D / 2]} s={[0.1, 2.3, 0.26]} c={accent} />)}
-      {full && <B p={[0, 2.35, D / 2]} s={[DOOR + 0.2, 0.12, 0.26]} c={accent} />}
-      {full && <group position={[DOOR / 2 + 0.45, 1.55, D / 2 + 0.115]}>
-        <B p={[0, 0, 0]} s={[0.42, 0.26, 0.02]} c={accent} cast={false} />
-        <B p={[0, 0, 0.012]} s={[0.36, 0.2, 0.01]} c="#fffaf0" cast={false} />
-      </group>}
-    </group>
-  );
-}
 
-function Room({ room, count, busy, mine, onPick, viewer, full }) {
+function Room({ room, count, busy, mine, onPick, viewer, full, island }) {
   const [hover, setHover] = useState(false);
   const label = useRef();
   useFrame(() => {
     if (!label.current) return;
-    // walking: the sign of the room I'm in, or of a door I'm close to
-    const near = !viewer.on || roomAt(viewer.pos.x, viewer.pos.z) === room ||
-      (Math.abs(viewer.pos.z) < 2 && Math.abs(viewer.pos.x - room.pos.x) < 4.5);
+    // walking: the sign of the area I'm in or close to
+    const near = !viewer.on || Math.hypot(viewer.pos.x - room.pos.x, viewer.pos.z - room.pos.z) < 6.5;
     label.current.style.display = near ? '' : 'none';
   });
   const { scene: sc } = room;
+  const [wall, accent] = PAINT[sc.id] || ['#efe5d6', '#b9a68b'];
   return (
     <group position={room.pos}>
-      <RoomFloor id={sc.id} hue={sc.hue} w={ROOM_W - 0.2} d={ROOM_D - 0.2} bright={hover || mine}
-        onPointerOver={e => { e.stopPropagation(); setHover(true); document.body.style.cursor = 'pointer'; }}
-        onPointerOut={() => { setHover(false); document.body.style.cursor = ''; }}
-        onClick={e => { e.stopPropagation(); onPick(sc); }} />
-      {/* windows in the tall outer walls */}
-      {room.north && [-1.7, 1.7].map(x => <Window key={x} p={[x, 1.45, -ROOM_D / 2 + 0.18]} w={1.6} />)}
-      {room.north && room.col === 0 && <Window p={[-ROOM_W / 2 + 0.18, 1.45, 0]} r={Math.PI / 2} w={2.2} />}
-      {!room.north && room.col === 0 && <Window p={[-ROOM_W / 2 + 0.18, 1.45, 0.4]} r={Math.PI / 2} w={2.2} />}
       <group rotation-y={room.rot}>
-        <Paint room={room} full={full} />
-        <Furniture id={sc.id} hue={sc.hue} north={room.north || full} />
+        <RoomFloor id={sc.id} hue={sc.hue} geometry={island} bright={hover || mine}
+          onPointerOver={e => { e.stopPropagation(); setHover(true); document.body.style.cursor = 'pointer'; }}
+          onPointerOut={() => { setHover(false); document.body.style.cursor = ''; }}
+          onClick={e => { e.stopPropagation(); onPick(sc); }} />
+        <Area accent={accent} wall={wall} h={full ? 1.7 : room.north ? 1.1 : 0.7} full={full} />
+        <Furniture id={sc.id} hue={sc.hue} north={false} />
         <Npc room={room} busy={busy} />
       </group>
-      <Html position={[0, room.north ? 3.2 : 1.6, room.north ? -3 : -3.4]} center zIndexRange={[8, 0]}>
+      <Html position={[0, room.north ? 3.2 : 1.6, room.north ? -3 : 3.4]} center zIndexRange={[8, 0]}>
         <button ref={label} className={'w-room' + (mine ? ' mine' : '') + (hover ? ' hover' : '')} style={{ '--c': hsl(sc.hue, 55, 45) }} onClick={() => onPick(sc)}>
           {sc.title}<small>{sc.name}{count ? ` · ${count} người` : ''}</small>
         </button>
@@ -313,44 +270,27 @@ function Room({ room, count, busy, mine, onPick, viewer, full }) {
   );
 }
 
+// the outer walls, plastered inside, with the windows; the far ones tall, the near ones cut low from above
 function Walls({ full }) {
-  const wall = '#efe5d6', top = '#d9cbb6';
-  // walking in first person every wall is full height, like a real building; from above the near ones are cut low
-  const W = (x, z, w, d, h0, h = full ? 2.8 : h0) => (
-    <group key={`${x}:${z}:${w}:${d}`}>
+  const wall = '#efe5d6', top = '#d9cbb6', Z = BZ;
+  const W = (key, x, z, w, d, h0, h = full ? 2.8 : h0) => (
+    <group key={key}>
       <B p={[x, h / 2, z]} s={[w, h, d]} c={wall} />
       <B p={[x, h + 0.02, z]} s={[w + 0.02, 0.04, d + 0.02]} c={top} cast={false} />
     </group>
   );
-  const out = [];
-  const X1 = BX, Z0 = -(HALL + ROOM_D), Z1 = HALL + ROOM_D, door = 1.8;
-  out.push(W(CX, Z0, LEN, 0.25, TALL));                      // far outer walls: tall
-  out.push(W(X0, 0, 0.25, Z1 - Z0, TALL));
-  out.push(W(CX, Z1, LEN, 0.25, LOW));                       // near outer walls: low
-  out.push(W(X1, -(HALL + Z1) / 2 - 0.5, 0.25, Z1 - HALL + 1, LOW));
-  out.push(W(X1, (HALL + Z1) / 2 + 0.5, 0.25, Z1 - HALL + 1, LOW));
-  for (let i = 1; i < COLS; i++) {                         // partitions between rooms
-    const x = X0 + i * ROOM_W;
-    out.push(W(x, -(HALL + ROOM_D / 2), 0.2, ROOM_D, PART));
-    out.push(W(x, HALL + ROOM_D / 2, 0.2, ROOM_D, PART));
-  }
-  for (let i = 0; i < COLS; i++) {                         // corridor walls, with a door into every room
-    const cx = X0 + ROOM_W / 2 + i * ROOM_W, seg = (ROOM_W - door) / 2;
-    for (const side of [-1, 1]) {
-      const z = side * HALL, h = side < 0 ? LOW : PART;
-      out.push(W(cx - door / 2 - seg / 2, z, seg, 0.2, h));
-      out.push(W(cx + door / 2 + seg / 2, z, seg, 0.2, h));
-      // corridor side: a sage wainscot with a wooden rail
-      const hw = Math.min(full ? 1.05 : h, 1.05), zf = z - side * 0.11;
-      for (const x of [cx - door / 2 - seg / 2, cx + door / 2 + seg / 2]) out.push(
-        <group key={'wc' + x + ':' + z}>
-          <B p={[x, hw / 2, zf]} s={[seg, hw - 0.01, 0.02]} c="#8fb0a2" cast={false} />
-          {full && <B p={[x, 1.07, zf - side * 0.01]} s={[seg, 0.06, 0.04]} c="#8a6648" cast={false} />}
-          <B p={[x, 0.06, zf - side * 0.015]} s={[seg, 0.12, 0.02]} c="#5b4636" cast={false} />
-        </group>);
-    }
-  }
-  return <group>{out}</group>;
+  const seg = Z - 1.5;
+  return (
+    <group>
+      {W('n', CX, -Z, LEN, 0.25, TALL)}
+      {W('w', X0, 0, 0.25, 2 * Z, TALL)}
+      {W('s', CX, Z, LEN, 0.25, LOW)}
+      {W('e1', BX, -(1.5 + seg / 2), 0.25, seg, LOW)}
+      {W('e2', BX, 1.5 + seg / 2, 0.25, seg, LOW)}
+      {ROOM_LIST.filter(r => r.north).flatMap(r => [-1.7, 1.7].map(dx => <Window key={'n' + r.pos.x + dx} p={[r.pos.x + dx, 1.45, -Z + 0.18]} w={1.6} />))}
+      {[-5.25, 5.65].map(z => <Window key={'w' + z} p={[X0 + 0.18, 1.45, z]} r={Math.PI / 2} w={2.2} />)}
+    </group>
+  );
 }
 
 function Grounds({ walk }) {
@@ -358,11 +298,9 @@ function Grounds({ walk }) {
     <group>
       <Campus walk={walk} />
       <mesh rotation-x={-Math.PI / 2} position={[CX, 0, 0]} receiveShadow>
-        <planeGeometry args={[LEN, 2 * (HALL + ROOM_D)]} /><meshStandardMaterial color="#f4ede2" />
+        <planeGeometry args={[LEN, 2 * BZ]} /><meshStandardMaterial color="#efe7da" roughness={0.6} />
       </mesh>
-      <mesh rotation-x={-Math.PI / 2} position={[CX, 0.015, 0]} receiveShadow>
-        <planeGeometry args={[LEN, HALL * 2]} /><meshStandardMaterial map={floorTexture('hall', [LEN / 2, 1.5])} roughness={0.35} />
-      </mesh>
+      <Promenade full={walk} />
       <Html position={[BX + 0.4, walk ? 3.45 : 2.6, 0]} center zIndexRange={[8, 0]}>
         <div className="w-sign">Trường THPT Nguyễn Thái Học</div>
       </Html>
@@ -451,6 +389,7 @@ export default function School({ users, meId, focus, fit = 1, nonce = 0, onPick,
   const count = {}, busy = {};
   users.forEach(u => { if (u.scene) { count[u.scene] = (count[u.scene] || 0) + 1; if (u.phase === 'speaking') busy[u.scene] = 'speaking'; } });
   const mine = users.find(u => u.id === meId);
+  const island = useMemo(() => islandGeometry(), []);
 
   return (
     <Canvas orthographic shadows={!MOBILE} dpr={MOBILE ? (walk ? 1 : [1, 1.5]) : [1, 2]} camera={{ position: [CX + 28, 26, 24], zoom: 30, near: -200, far: 400 }}
@@ -468,19 +407,12 @@ export default function School({ users, meId, focus, fit = 1, nonce = 0, onPick,
       <Shell full={walk} tall={TALL} low={LOW} />
       {walk && (
         <mesh position={[CX, 2.82, 0]} rotation-x={Math.PI / 2}>
-          <planeGeometry args={[LEN, 2 * (HALL + ROOM_D)]} />
+          <planeGeometry args={[LEN, 2 * BZ]} />
           <meshStandardMaterial color="#fbf8f2" side={THREE.DoubleSide} />
         </mesh>
       )}
-      {/* ceiling light panels in every room and along the corridor */}
-      {walk && [...ROOM_LIST.flatMap(r => [-1.6, 1.6].map(dx => [r.pos.x + dx, r.pos.z])), ...Array.from({ length: COLS * 2 - 1 }, (_, k) => [X0 + 3.5 + k * 3.5, 0])].map(([x, z]) => (
-        <mesh key={x + ':' + z} position={[x, 2.8, z]} rotation-x={Math.PI / 2}>
-          <planeGeometry args={[1.1, 0.5]} /><meshStandardMaterial color="#fffdf5" emissive="#fff6dc" emissiveIntensity={1} side={THREE.DoubleSide} />
-        </mesh>
-      ))}
-      <CorridorDecor x0={X0} x1={BX} hall={HALL} />
       {Object.values(ROOMS).map(r => (
-        <Room key={r.scene.id} room={r} count={count[r.scene.id]} busy={busy[r.scene.id]}
+        <Room key={r.scene.id} room={r} count={count[r.scene.id]} busy={busy[r.scene.id]} island={island}
               mine={mine && mine.scene === r.scene.id} onPick={onPick} viewer={pilot} full={walk} />
       ))}
       </Bake>
