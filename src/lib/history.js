@@ -8,6 +8,7 @@ export function loadHistory() {
 
 // insert or update one session (matched by id), newest first
 export function saveSession(session) {
+  logDay(session);
   const all = loadHistory().filter(x => x.id !== session.id);
   all.unshift(session);
   try { localStorage.setItem(KEY, JSON.stringify(all.slice(0, MAX))); } catch (e) { /* full or private mode */ }
@@ -38,3 +39,42 @@ export function memoryFor(sceneId, history) {
   return `You have met this learner before (${when}). Things they said last time:\n${said}\n` +
          'Greet them like someone you remember and, if it fits, refer to last time briefly. Do not repeat these lines back.';
 }
+
+// ---------------------------------------------------------------- progress
+// Sentences said per day and per room, kept apart from the (capped) history so the streak and the room
+// counts survive old sessions being dropped: { days: { 'YYYY-MM-DD': { sessionId: sentences } },
+// rooms: { sceneId: { sessionId: sentences } } }
+const DAYS = 'sp-progress', GOAL = 10;
+const dayOf = t => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+function loadLog() {
+  try {
+    if (localStorage.getItem(DAYS) == null) {                 // first time: count the sessions already in the history
+      localStorage.setItem(DAYS, '{}');
+      loadHistory().slice().reverse().forEach(logDay);
+    } const x = JSON.parse(localStorage.getItem(DAYS) || '{}'); return { days: x.days || {}, rooms: x.rooms || {} }; } catch (e) { return { days: {}, rooms: {} }; }
+}
+function logDay(session) {
+  const log = loadLog(), n = session.msgs.filter(m => m.who === 'me').length, day = dayOf(session.start);
+  (log.days[day] = log.days[day] || {})[session.id] = n;
+  (log.rooms[session.scene] = log.rooms[session.scene] || {})[session.id] = n;
+  const old = dayOf(Date.now() - 400 * 86400000);
+  for (const d of Object.keys(log.days)) if (d < old) delete log.days[d];
+  try { localStorage.setItem(DAYS, JSON.stringify(log)); } catch (e) { /* private mode */ }
+}
+
+// what the progress card shows: today against the daily goal, the streak of days in a row, the last week,
+// and per room how many sessions and sentences
+export function progress() {
+  const { days, rooms } = loadLog(), sum = o => Object.values(o || {}).reduce((a, b) => a + b, 0);
+  const said = d => sum(days[dayOf(d)]);
+  const now = Date.now(), DAY = 86400000;
+  let streak = 0, t = now;
+  if (!said(t)) t -= DAY;                            // today not started yet: the streak up to yesterday still counts
+  while (said(t) > 0) { streak++; t -= DAY; }
+  const week = Array.from({ length: 7 }, (_, i) => { const d = now - (6 - i) * DAY; return { d: new Date(d).getDay(), n: said(d) }; });
+  const room = Object.fromEntries(Object.entries(rooms).map(([k, v]) => [k, { sessions: Object.values(v).filter(Boolean).length, said: sum(v) }]));
+  return { today: said(now), goal: GOAL, streak, week, room, total: sum(Object.fromEntries(Object.entries(days).map(([k, v]) => [k, sum(v)]))) };
+}
+
+// stars for a room: 1 after a session, 2 after three, 3 after six
+export const stars = r => (!r || !r.sessions ? 0 : r.sessions >= 6 ? 3 : r.sessions >= 3 ? 2 : 1);
