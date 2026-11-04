@@ -40,7 +40,7 @@ export function roomAt(x, z) {
   return ROOM_LIST.find(r => Math.abs(x - r.pos.x) < IN_W / 2 - 0.2 && Math.abs(z - r.pos.z) < IN_D / 2 - 0.2) || null;
 }
 function canStand(x, z) {
-  return Math.abs(x) < EDGE_X + 12 && Math.abs(z) < EDGE_Z + 12 && !blockedCity(x, z);
+  return Math.abs(x) < EDGE_X + 150 && Math.abs(z) < EDGE_Z + 150 && !blockedCity(x, z);   // the town and its countryside
 }
 
 // first person: show a label only for who is near and on my side of the walls
@@ -233,7 +233,7 @@ function FirstPerson({ pilot }) {
     cam.current.position.set(pilot.pos.x, 1.5 + (pilot.bob || 0), pilot.pos.z);
     cam.current.rotation.set(pilot.pitch, pilot.yaw, 0, 'YXZ');
   });
-  return <PerspectiveCamera ref={cam} makeDefault fov={70} near={0.05} far={200} />;
+  return <PerspectiveCamera ref={cam} makeDefault fov={70} near={0.05} far={450} />;
 }
 
 // ---------------------------------------------------------------- the buildings
@@ -354,15 +354,15 @@ export default function School({ users, meId, focus, fit = 1, nonce = 0, onPick,
   const mine = users.find(u => u.id === meId);
 
   return (
-    <Canvas orthographic shadows={!MOBILE} dpr={MOBILE ? (walk ? 1 : [1, 1.5]) : [1, 2]} camera={{ position: [32, 34, 40], zoom: 12, near: -300, far: 600 }}
+    <Canvas orthographic shadows={!MOBILE} dpr={MOBILE ? (walk ? 1 : [1, 1.5]) : [1, 2]} camera={{ position: [32, 34, 40], zoom: 12, near: -300, far: 900 }}
       onCreated={st => { if (import.meta.env.DEV) window.__r3f = st; }} onPointerMissed={() => { document.body.style.cursor = ''; }}>
       <color attach="background" args={[walk ? '#cfe6f5' : '#dfe9d3']} />
       {walk && <Sky distance={4000} sunPosition={[60, 40, 30]} turbidity={4} rayleigh={1.2} mieCoefficient={0.004} />}
-      {walk && <fog attach="fog" args={['#dbe9f2', 70, 230]} />}
+      {walk && <fog attach="fog" args={['#dbe9f2', 90, 320]} />}
       <hemisphereLight args={['#fffaf0', walk ? '#efe6d6' : '#b7c49f', 1]} />
       {walk && <ambientLight intensity={0.55} color="#fff4e6" />}
       <directionalLight position={[30, 50, 22]} intensity={1.5} castShadow={!MOBILE} shadow-mapSize={[4096, 4096]}
-        shadow-camera-left={-70} shadow-camera-right={70} shadow-camera-top={60} shadow-camera-bottom={-60} shadow-camera-far={160} shadow-bias={-0.0005} />
+        shadow-camera-left={-105} shadow-camera-right={105} shadow-camera-top={95} shadow-camera-bottom={-95} shadow-camera-far={220} shadow-bias={-0.0005} />
       <Bake key={walk ? 'walk' : 'view'}>
       <City walk={walk} />
       {Object.values(ROOMS).map(r => (
@@ -374,7 +374,7 @@ export default function School({ users, meId, focus, fit = 1, nonce = 0, onPick,
       {walk
         ? <FirstPerson pilot={pilot} />
         : <>
-            <OrbitControls makeDefault enableDamping screenSpacePanning={false} minZoom={4} maxZoom={140}
+            <OrbitControls makeDefault enableDamping screenSpacePanning={false} minZoom={2} maxZoom={140}
               minPolarAngle={0.5} maxPolarAngle={1.1} target={[0, 2, 0]} />
             <Rig focus={focus} fit={fit} nonce={nonce} />
           </>}

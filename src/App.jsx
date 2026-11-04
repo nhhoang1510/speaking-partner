@@ -461,7 +461,7 @@ function Stick({ input }) {
 }
 
 function ViewBar({ view, setView, sheet, setSheet, onWalk }) {
-  const zoom = k => setView(v => ({ fit: Math.min(2.5, Math.max(0.6, v.fit * k)), n: v.n + 1 }));
+  const zoom = k => setView(v => ({ fit: Math.min(2.5, Math.max(0.3, v.fit * k)), n: v.n + 1 }));
   const tab = k => setSheet(sheet === k ? null : k);
   return (
     <div className="viewbar glass">
