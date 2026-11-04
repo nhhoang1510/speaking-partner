@@ -3,11 +3,12 @@
 // city map (LAYOUT in city.jsx). Each block gets a seed from its place, so repeated kinds (houses, shops,
 // flats...) all look a little different. Blocks are drawn around their centre; the usable lot is |x|, |z| < LOT,
 // with the street side at +z.
-import { useMemo, useRef } from 'react';
+import { useContext, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { B, C, S, paint, rnd } from './props.jsx';
 import { Tree, Car, Bench } from './scenery.jsx';
+import { Night } from './time.js';
 
 export const LOT = 4.9;
 
@@ -31,6 +32,18 @@ function windows(wall, glass, repeat, strip) {
     g.fillStyle = 'rgba(255,255,255,.55)'; g.fillRect(strip ? 0 : 12, 12, strip ? w : 40, 3);
   }, repeat);
 }
+// the same facade at night: some windows lit warm, the rest and the walls dark (4 x 4 bays, repeated)
+function lights(repeat, strip, seed) {
+  return paint('lit:' + strip + seed, 128, 128, (g, w, h) => {
+    const r = rnd(seed * 7919 + 1);
+    g.fillStyle = '#000'; g.fillRect(0, 0, w, h);
+    for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) {
+      if (r() > 0.55) continue;
+      g.fillStyle = ['#ffd58a', '#ffe7b8', '#ffc66b'][Math.floor(r() * 3)];
+      if (strip) g.fillRect(x * 32, y * 32 + 6, 32, 20); else g.fillRect(x * 32 + 6, y * 32 + 6, 20, 20);
+    }
+  }, repeat.map(v => v / 4));
+}
 export function stripes(a, b) {
   return paint('stripe:' + a + b, 64, 8, (g, w, h) => { for (let i = 0; i < 8; i++) { g.fillStyle = i % 2 ? b : a; g.fillRect(i * 8, 0, 8, h); } }, [6, 1]);
 }
@@ -39,12 +52,15 @@ export function Block({ p, s, wall, glass = '#7fb2d6', strip, roof = '#9aa0a6' }
   const [w, h, d] = s;
   const side = useMemo(() => windows(wall, glass, [Math.max(1, Math.round(w / 1.8)), Math.max(1, Math.round(h / 1.6))], strip), [wall, glass, w, h, strip]);
   const end = useMemo(() => windows(wall, glass, [Math.max(1, Math.round(d / 1.8)), Math.max(1, Math.round(h / 1.6))], strip), [wall, glass, d, h, strip]);
+  const night = useContext(Night);
+  const lit = useMemo(() => night && [side, end].map((t, i) => lights([t.repeat.x, t.repeat.y], strip, Math.round(w * 13 + h * 7 + d * 3) % 5 + i)), [night, side, end, strip, w, h, d]);
   return (
     <group position={p}>
       <mesh position={[0, h / 2, 0]} castShadow receiveShadow>
         <boxGeometry args={[w, h, d]} />
         {[end, end, null, null, side, side].map((m, i) => m
-          ? <meshStandardMaterial key={i} attach={`material-${i}`} map={m} roughness={0.6} />
+          ? <meshStandardMaterial key={i} attach={`material-${i}`} map={m} roughness={0.6}
+              emissive={lit ? '#ffffff' : '#000000'} emissiveMap={lit ? lit[m === side ? 0 : 1] : null} emissiveIntensity={lit ? 0.9 : 0} />
           : <meshStandardMaterial key={i} attach={`material-${i}`} color={roof} roughness={0.9} />)}
       </mesh>
       <B p={[0, h + 0.2, 0]} s={[w + 0.2, 0.4, d + 0.2]} c={wall} />

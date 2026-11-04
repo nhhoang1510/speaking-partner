@@ -1,11 +1,12 @@
 // Everything beyond the town's last street: country roads leading out (where new districts can be joined on
 // later), a railway with a train along the north edge, a river with a bridge, fields, woods, wind turbines on
 // the hills, and a far-off skyline. Sizes come from the town grid, so this follows the town when it grows.
-import { useMemo, useRef } from 'react';
+import { useContext, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { B, C, rnd } from './props.jsx';
 import { Many, Clouds, tex } from './scenery.jsx';
 import { Bake } from './bake.jsx';
+import { Night } from './time.js';
 
 const FAR = 260;                                            // how far the countryside reaches from the centre
 
@@ -29,6 +30,7 @@ function Train({ z }) {
 }
 
 export function Outskirts({ edgeX, edgeZ, roadsX, roadsZ, road, walk }) {
+  const night = useContext(Night);
   const grass = useMemo(() => tex('grass', [90, 90]), []);
   const railZ = -edgeZ - 9, riverZ = -edgeZ - 24, outX = roadsX[Math.floor(roadsX.length / 2)], outZ = roadsZ[Math.floor(roadsZ.length / 2)];
   const stuff = useMemo(() => {
@@ -103,7 +105,7 @@ export function Outskirts({ edgeX, edgeZ, roadsX, roadsZ, road, walk }) {
       <Many geo={<coneGeometry args={[1.3, 3, 8]} />} c="#3f7a4f" at={stuff.pines} />
       {stuff.blades.map(b => <Turbine key={b.x} {...b} />)}
       {skyline.filter(b => walk || !b.front).map((b, i) => <B key={i} p={[b.x, b.h / 2, b.z]} s={[b.w, b.h, b.d]} c={b.c} />)}
-      {walk && <Clouds />}
+      {walk && !night && <Clouds />}
     </group>
   );
 }

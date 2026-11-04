@@ -38,7 +38,7 @@ export const WALK_Z = ROADS_Z.slice(0, -1).flatMap((_, r) => [rowZ(r) - SIDE, ro
 export const WALK_X = ROADS_X.slice(0, -1).flatMap((_, c) => [colX(c) - SIDE, colX(c) + SIDE]);
 
 // every block: what stands on it, where, and a seed so repeated kinds differ
-const CELLS = LAYOUT.flatMap((row, r) => row.map((id, c) => ({ id, x: colX(c), z: rowZ(r), r, c, seed: r * 31 + c * 7 + 1 })));
+export const CELLS = LAYOUT.flatMap((row, r) => row.map((id, c) => ({ id, x: colX(c), z: rowZ(r), r, c, seed: r * 31 + c * 7 + 1 })));
 export const LOTS = Object.fromEntries(CELLS.map(L => [L.id, L]));      // by id (practice buildings are unique)
 const cellAt = (x, z) => {
   const c = Math.round(x / P + (NC - 1) / 2), r = Math.round(z / P + (NR - 1) / 2);

@@ -1,8 +1,9 @@
 // Small shared pieces of the town and the countryside: ground textures, an instanced-mesh helper, and street
 // furniture (trees, cars, lamps, benches) plus the clouds.
-import { useLayoutEffect, useMemo, useRef } from 'react';
+import { useContext, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { B, C, S, paint, rnd } from './props.jsx';
+import { Night } from './time.js';
 
 // ---------------------------------------------------------------- textures
 export function tex(kind, repeat) {
@@ -73,11 +74,16 @@ export function Car({ x, z, c, r = 0 }) {
 }
 
 export function Lamp({ x, z }) {
+  const night = useContext(Night);
   return (
     <group position={[x, 0, z]}>
       <C p={[0, 1.6, 0]} r={0.05} h={3.2} c="#3a3f45" metal={0.6} seg={8} />
       <C p={[0, 3.25, 0]} r={0.08} r2={0.22} h={0.22} c="#3a3f45" metal={0.6} seg={10} />
       <S p={[0, 3.1, 0]} r={0.13} c="#fff6d6" e="#ffe8b0" />
+      {night && <>
+        <mesh position={[0, 3.05, 0]}><sphereGeometry args={[0.42, 10, 8]} /><meshBasicMaterial color="#ffd98a" transparent opacity={0.28} depthWrite={false} /></mesh>
+        <mesh position={[0, 0.02, 0]} rotation-x={-Math.PI / 2}><circleGeometry args={[2.6, 20]} /><meshBasicMaterial color="#ffcf7a" transparent opacity={0.3} depthWrite={false} /></mesh>
+      </>}
     </group>
   );
 }
