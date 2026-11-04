@@ -2,7 +2,7 @@
 // Pudong with its landmarks, and me as an arrow pointing where I look, with the name of where I am. Tap a
 // practice building, or a landmark, to be taken there.
 import { useEffect, useRef } from 'react';
-import { CELLS, BLK, P, ROAD, EDGE_X, EDGE_Z, FAR } from './world/city.jsx';
+import { CELLS, BLK, P, ROAD, EDGE_X, EDGE_Z, FAR, ROADS_X, ROADS_Z, ROAD_NAMES_X, ROAD_NAMES_Z } from './world/city.jsx';
 import { layout, fillOf } from './world/shanghai.jsx';
 import { SCENES } from './scenes.js';
 
@@ -14,8 +14,8 @@ const GROUND = {
   bund: '#e6d6a8', nanjing: '#f29b8a', yuyuan: '#c9a77a', shikumen: '#b9b2a6',
 };
 const NAMES = {
-  houses: 'Khu nhà dân', shops: 'Dãy cửa hàng', offices: 'Khu văn phòng', flats: 'Chung cư', tower: 'Cao ốc', park: 'Công viên',
-  pitch: 'Sân bóng đá', market: 'Chợ phiên', hospital: 'Bệnh viện', mall: 'Trung tâm thương mại', station: 'Ga trung tâm',
+  houses: 'Biệt thự cổ', shops: 'Phố cửa hàng', offices: 'Khu văn phòng', flats: 'Chung cư', tower: 'Cao ốc', park: 'Công viên',
+  pitch: 'Sân bóng đá', market: 'Chợ phiên', hospital: 'Bệnh viện', mall: 'Trung tâm thương mại', station: 'Ga Thượng Hải',
   school: 'Trường THPT Nguyễn Thái Học', parking: 'Bãi đỗ xe', fuel: 'Cây xăng', lake: 'Công viên hồ', garden: 'Vườn hoa',
   playground: 'Sân chơi trẻ em', courts: 'Sân bóng rổ', plaza: 'Quảng trường', metro: 'Ga tàu điện ngầm', bund: 'Bến Thượng Hải',
   nanjing: 'Phố đi bộ Nam Kinh', yuyuan: 'Dự Viên', shikumen: 'Ngõ Thạch Khố Môn',
@@ -37,11 +37,12 @@ function whereIs(x, z) {
   if (x > L.west) return Math.abs(z) < 5 ? 'Cầu Phố Đông' : 'Sông Hoàng Phố';
   if (x > EDGE_X + 3.5) return 'Bến Thượng Hải';
   if (Math.abs(x) > EDGE_X + 3.5 || Math.abs(z) > EDGE_Z + 3.5) return 'Ngoại ô';
-  const cell = CELLS.find(c => Math.abs(x - c.x) < P / 2 && Math.abs(z - c.z) < P / 2);
-  if (!cell) return 'Trên phố';
-  const near = Math.abs(x - cell.x) < BLK / 2 && Math.abs(z - cell.z) < BLK / 2;
-  const name = SCENE[cell.id] ? SCENE[cell.id].title : NAMES[cell.id] || 'Trên phố';
-  return near ? name : `Phố gần ${name}`;
+  const cell = CELLS.find(c => Math.abs(x - c.x) < BLK / 2 && Math.abs(z - c.z) < BLK / 2);
+  if (cell) return SCENE[cell.id] ? SCENE[cell.id].title : NAMES[cell.id] || 'Trên phố';
+  // on a street: its name (the nearer one at a crossroads)
+  const i = ROADS_X.findIndex(r => Math.abs(x - r) < P / 2 - BLK / 2), j = ROADS_Z.findIndex(r => Math.abs(z - r) < P / 2 - BLK / 2);
+  const road = i >= 0 && (j < 0 || Math.abs(x - ROADS_X[i]) < Math.abs(z - ROADS_Z[j])) ? ROAD_NAMES_X[i] : j >= 0 ? ROAD_NAMES_Z[j] : null;
+  return road ? `${road[2]} · ${road[0]}` : 'Trên phố';
 }
 
 // track: the walking state from the 3D view ({ pos, yaw }), read every frame; onGo(sceneId | {x, z, yaw})
