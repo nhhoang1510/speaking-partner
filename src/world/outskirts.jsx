@@ -29,13 +29,14 @@ function Train({ z }) {
   );
 }
 
-export function Outskirts({ edgeX, edgeZ, roadsX, roadsZ, road, walk }) {
+export function Outskirts({ edgeX, edgeZ, roadsX, roadsZ, road, walk, east = Infinity }) {
   const night = useContext(Night);
   const grass = useMemo(() => tex('grass', [90, 90]), []);
   const railZ = -edgeZ - 9, riverZ = -edgeZ - 24, outX = roadsX[Math.floor(roadsX.length / 2)], outZ = roadsZ[Math.floor(roadsZ.length / 2)];
   const stuff = useMemo(() => {
     const r = rnd(77), trunks = [], crowns = [], pines = [], sleepers = [], fields = [], blades = [];
-    const clear = (x, z) => Math.abs(x) < edgeX + 9 && Math.abs(z) < edgeZ + 9;
+    // east of `east` is the river and Pudong (shanghai.jsx): no woods or fields there
+    const clear = (x, z) => (Math.abs(x) < edgeX + 9 && Math.abs(z) < edgeZ + 9) || (x > east && z > -edgeZ - 14 && z < edgeZ + 70);
     const onRoad = (x, z) => Math.abs(x - outX) < road || Math.abs(z - outZ) < road || Math.abs(z - railZ) < 4 || Math.abs(z - riverZ) < 10;
     // woods and single trees all round
     for (let i = 0; i < 520; i++) {
@@ -54,7 +55,7 @@ export function Outskirts({ edgeX, edgeZ, roadsX, roadsZ, road, walk }) {
       if (onRoad(fx, fz) || clear(fx, fz)) continue;
       fields.push({ x: fx, z: fz, w, d, c: crops[i % crops.length] });
     }
-    for (let k = 0; k < 3; k++) blades.push({ x: edgeX + 60 + k * 26, z: -40 + k * 30, p: k });
+    for (let k = 0; k < 3; k++) blades.push({ x: -edgeX - 60 - k * 26, z: 40 + k * 30, p: k });
     return { trunks, crowns, pines, sleepers, fields, blades };
   }, [edgeX, edgeZ]);
   // a far-off skyline all round; while looking from above, none between the camera and the town

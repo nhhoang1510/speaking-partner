@@ -22,47 +22,35 @@ export function signTexture(text, bg, fg = '#ffffff') {
     g.fillStyle = fg; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, w / 2, h / 2 + 2);
   }, [1, 1]);
 }
-// one storey-high bay of a facade: wall colour around a window (repeat it over a wall)
-function windows(wall, glass, repeat, strip) {
-  return paint('win:' + wall + glass + strip, 64, 64, (g, w, h) => {
-    g.fillStyle = wall; g.fillRect(0, 0, w, h);
-    const grd = g.createLinearGradient(0, 10, 0, 54); grd.addColorStop(0, glass); grd.addColorStop(1, '#e8f4fb');
-    g.fillStyle = grd;
-    if (strip) g.fillRect(0, 12, w, 40); else g.fillRect(12, 12, 40, 40);
-    g.fillStyle = 'rgba(255,255,255,.55)'; g.fillRect(strip ? 0 : 12, 12, strip ? w : 40, 3);
-  }, repeat);
-}
-// the same facade at night: some windows lit warm, the rest and the walls dark (4 x 4 bays, repeated)
-function lights(repeat, strip, seed) {
-  return paint('lit:' + strip + seed, 128, 128, (g, w, h) => {
-    const r = rnd(seed * 7919 + 1);
-    g.fillStyle = '#000'; g.fillRect(0, 0, w, h);
-    for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) {
-      if (r() > 0.55) continue;
-      g.fillStyle = ['#ffd58a', '#ffe7b8', '#ffc66b'][Math.floor(r() * 3)];
-      if (strip) g.fillRect(x * 32, y * 32 + 6, 32, 20); else g.fillRect(x * 32 + 6, y * 32 + 6, 20, 20);
-    }
-  }, repeat.map(v => v / 4));
-}
 export function stripes(a, b) {
   return paint('stripe:' + a + b, 64, 8, (g, w, h) => { for (let i = 0; i < 8; i++) { g.fillStyle = i % 2 ? b : a; g.fillRect(i * 8, 0, 8, h); } }, [6, 1]);
 }
-// a box with windows on its four sides and a plain roof
+// a building with windows on its four sides and a plain roof, made only of plain boxes so the whole town's
+// buildings bake into a handful of meshes: a glass core, a wall band at every floor, and (unless the
+// windows run in strips) pilasters between the windows; at night some windows are lit
 export function Block({ p, s, wall, glass = '#7fb2d6', strip, roof = '#9aa0a6' }) {
   const [w, h, d] = s;
-  const side = useMemo(() => windows(wall, glass, [Math.max(1, Math.round(w / 1.8)), Math.max(1, Math.round(h / 1.6))], strip), [wall, glass, w, h, strip]);
-  const end = useMemo(() => windows(wall, glass, [Math.max(1, Math.round(d / 1.8)), Math.max(1, Math.round(h / 1.6))], strip), [wall, glass, d, h, strip]);
   const night = useContext(Night);
-  const lit = useMemo(() => night && [side, end].map((t, i) => lights([t.repeat.x, t.repeat.y], strip, Math.round(w * 13 + h * 7 + d * 3) % 5 + i)), [night, side, end, strip, w, h, d]);
+  const floors = Math.max(1, Math.round(h / 1.6)), fh = h / floors;
+  const nw = Math.max(1, Math.round(w / 1.8)), nd = Math.max(1, Math.round(d / 1.8));
+  const lit = useMemo(() => {
+    if (!night) return [];
+    const r = rnd(Math.round(w * 13 + h * 7 + d * 3 + Math.abs(p[0]) * 5 + Math.abs(p[2]) * 3) + 1), out = [];
+    for (let f = 0; f < floors; f++) for (let face = 0; face < 4; face++) if (r() < 0.45) out.push([f, face]);
+    return out;
+  }, [night, w, h, d, floors]);
+  const band = strip ? 0.7 : 0.45;
   return (
     <group position={p}>
-      <mesh position={[0, h / 2, 0]} castShadow receiveShadow>
-        <boxGeometry args={[w, h, d]} />
-        {[end, end, null, null, side, side].map((m, i) => m
-          ? <meshStandardMaterial key={i} attach={`material-${i}`} map={m} roughness={0.6}
-              emissive={lit ? '#ffffff' : '#000000'} emissiveMap={lit ? lit[m === side ? 0 : 1] : null} emissiveIntensity={lit ? 0.9 : 0} />
-          : <meshStandardMaterial key={i} attach={`material-${i}`} color={roof} roughness={0.9} />)}
-      </mesh>
+      <B p={[0, h / 2, 0]} s={[w - 0.12, h, d - 0.12]} c={glass} rough={0.2} metal={0.3} />
+      {Array.from({ length: floors + 1 }, (_, f) => <B key={'f' + f} p={[0, Math.max(band / 2, f * fh), 0]} s={[w, band, d]} c={wall} />)}
+      {!strip && Array.from({ length: nw + 1 }, (_, i) => <B key={'x' + i} p={[-w / 2 + 0.2 + i * (w - 0.4) / nw, h / 2, 0]} s={[0.4, h, d]} c={wall} />)}
+      {!strip && Array.from({ length: nd + 1 }, (_, i) => <B key={'z' + i} p={[0, h / 2, -d / 2 + 0.2 + i * (d - 0.4) / nd]} s={[w, h, 0.4]} c={wall} />)}
+      {lit.map(([f, face]) => {
+        const y = f * fh + fh / 2 + band / 4, hh = fh - band - 0.05, along = face < 2;
+        const pos = along ? [0, y, (face ? -1 : 1) * (d / 2 - 0.04)] : [(face === 2 ? 1 : -1) * (w / 2 - 0.04), y, 0];
+        return <B key={f + ':' + face} p={pos} s={along ? [w - 0.5, hh, 0.04] : [0.04, hh, d - 0.5]} c="#ffe2a8" e="#ffcf7a" ei={0.9} cast={false} />;
+      })}
       <B p={[0, h + 0.2, 0]} s={[w + 0.2, 0.4, d + 0.2]} c={wall} />
       <B p={[0, h + 0.05, 0]} s={[w - 0.3, 0.12, d - 0.3]} c={roof} cast={false} />
     </group>
@@ -244,6 +232,184 @@ function Metro() {
       </group>
       {[-4, 4].map(x => <Tree key={x} x={x} z={-4.1} k={0.7} />)}
       {[-0.6, 0, 0.6].map(x => <B key={x} p={[x, 0.35, 0.6]} s={[0.05, 0.6, 0.6]} c="#888" metal={0.5} />)}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------- Shanghai
+// a sign written top to bottom (Chinese shop signs hang that way), and a red lantern
+function vSign(text, bg, fg = '#ffffff') {
+  return paint('v:' + text + bg + fg, 64, 256, (g, w, h) => {
+    g.fillStyle = bg; g.fillRect(0, 0, w, h);
+    g.strokeStyle = fg; g.lineWidth = 3; g.strokeRect(5, 5, w - 10, h - 10);
+    const ch = [...text], step = (h - 20) / ch.length;
+    g.fillStyle = fg; g.font = `800 ${Math.min(44, step * 0.85)}px system-ui, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    ch.forEach((c, i) => g.fillText(c, w / 2, 10 + step * (i + 0.5)));
+  }, [1, 1]);
+}
+function Neon({ text, bg, p, h = 2.6, r = 0 }) {
+  const night = useContext(Night), map = useMemo(() => vSign(text, bg), [text, bg]);
+  return (
+    <mesh position={p} rotation-y={r}>
+      <planeGeometry args={[h / 4, h]} />
+      <meshStandardMaterial map={map} emissive="#ffffff" emissiveMap={map} emissiveIntensity={night ? 1.1 : 0.35} side={THREE.DoubleSide} />
+    </mesh>
+  );
+}
+const Lantern = ({ p }) => (
+  <group position={p}>
+    <S p={[0, 0, 0]} r={0.22} c="#d62828" e="#ff3b2f" sc={[1, 0.8, 1]} />
+    <B p={[0, 0.2, 0]} s={[0.16, 0.06, 0.16]} c="#e9b949" cast={false} />
+    <B p={[0, -0.24, 0]} s={[0.05, 0.14, 0.05]} c="#e9b949" cast={false} />
+  </group>
+);
+// a hipped Chinese roof: a low pyramid with the four corners flicked up
+function ChineseRoof({ p, w, c = '#3c4a4f', h = 0.9 }) {
+  return (
+    <group position={p}>
+      <mesh rotation-y={Math.PI / 4} castShadow><coneGeometry args={[w * 0.75, h, 4]} /><meshStandardMaterial color={c} /></mesh>
+      {[[1, 1], [1, -1], [-1, 1], [-1, -1]].map(([a, b]) => (
+        <mesh key={a + ':' + b} position={[a * w * 0.5, -h * 0.3, b * w * 0.5]} rotation={[b * 0.5, 0, -a * 0.5]} castShadow>
+          <boxGeometry args={[0.14, 0.5, 0.14]} /><meshStandardMaterial color={c} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+// the Bund: grand stone buildings from the 1920s facing the river (east): columns, a cornice, rows of
+// windows, and on top a clock tower, a green pyramid roof or a dome
+function Bund({ seed }) {
+  const r = rnd(seed), v = seed % 4, h = 9 + Math.round(r() * 4);
+  const stone = pick(r, ['#d9cdb2', '#cfc3a6', '#c9c1ae', '#ddd3bf']);
+  const glow = useContext(Night) ? { e: '#ffb347', ei: 0.35 } : {};      // floodlit gold at night
+  return (
+    <group rotation-y={Math.PI / 2}>
+      <Ground c="#d6cfbf" />
+      <B p={[0, h / 2, -0.6]} s={[9.4, h, 7.4]} c={stone} {...glow} />
+      <B p={[0, 0.6, -0.6]} s={[9.6, 1.2, 7.6]} c="#b9ae96" />
+      <B p={[0, h + 0.2, -0.6]} s={[9.9, 0.4, 7.9]} c="#efe7d6" />
+      {Array.from({ length: 4 }, (_, f) => Array.from({ length: 7 }, (_, k) => (
+        <B key={f + ':' + k} p={[-3.9 + k * 1.3, 2.2 + f * ((h - 3) / 4), 3.12]} s={[0.6, 1.1, 0.06]} c="#3b4650" cast={false} />
+      )))}
+      {[-3.6, -2.2, -0.8, 0.8, 2.2, 3.6].map(x => <C key={x} p={[x, 2.4, 3.6]} r={0.22} h={2.4} c="#efe7d6" seg={10} />)}
+      <B p={[0, 3.7, 3.6]} s={[8.2, 0.3, 0.7]} c="#efe7d6" />
+      {v === 0 && <group position={[0, h, 0.6]}>
+        <B p={[0, 3.5, 0]} s={[3, 7, 3]} c={stone} {...glow} />
+        {[1, -1].map(k => <C key={k} p={[0, 5.2, k * 1.52]} r={0.9} h={0.06} rx={Math.PI / 2} c="#f6f2e6" />)}
+        <mesh position={[0, 7.8, 0]} castShadow><cylinderGeometry args={[1.2, 1.5, 1.6, 8]} /><meshStandardMaterial color="#efe7d6" /></mesh>
+      </group>}
+      {v === 1 && <group position={[0, h, 0]}>
+        <B p={[0, 2, 0]} s={[3.4, 4, 3.4]} c={stone} {...glow} />
+        <mesh position={[0, 5.4, 0]} rotation-y={Math.PI / 4} castShadow><coneGeometry args={[2.6, 2.8, 4]} /><meshStandardMaterial color="#3f8a6a" /></mesh>
+      </group>}
+      {v === 2 && <group position={[0, h + 0.4, 0]}>
+        <C p={[0, 0.8, 0]} r={2.4} h={1.6} c={stone} seg={16} />
+        <mesh position={[0, 1.6, 0]} castShadow><sphereGeometry args={[2.3, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2]} /><meshStandardMaterial color="#7a8f86" /></mesh>
+      </group>}
+      {v === 3 && <><C p={[0, h + 2.5, 0]} r={0.05} h={4} c="#ddd" /><B p={[0.5, h + 4, 0]} s={[1, 0.6, 0.03]} c="#d62828" cast={false} /></>}
+    </group>
+  );
+}
+
+// Nanjing Road: a pedestrian shopping street, narrow shops hung with vertical neon signs and lanterns,
+// and an arch over the way in
+const NEONS = [['南京路', '#d62828'], ['百货公司', '#1f6fb2'], ['老字号', '#2a9d5c'], ['茶楼', '#8e44ad'], ['珠宝', '#d4a017'], ['饭店', '#e05a2a'], ['电影院', '#c2185b'], ['书店', '#00838f']];
+function Nanjing({ seed }) {
+  const r = rnd(seed), off = seed % NEONS.length;
+  return (
+    <>
+      <Ground c="#d8c7ab" />
+      {[-3.6, -1.2, 1.2, 3.6].map((x, i) => {
+        const h = 6 + Math.round(r() * 5), wall = pick(r, ['#e8dcc6', '#d9c3a5', '#c9b8a0', '#e6d2c0', '#bfc7cc']);
+        const [text, bg] = NEONS[(off + i) % NEONS.length];
+        return (
+          <group key={x} position={[x, 0, -2]}>
+            <B p={[0, h / 2, 0]} s={[2.3, h, 5]} c={wall} />
+            <B p={[0, 1.2, 2.52]} s={[2, 2.2, 0.05]} c="#bfe3f5" o={0.6} cast={false} />
+            {Array.from({ length: Math.floor((h - 3) / 1.5) }, (_, f) => <B key={f} p={[0, 3.4 + f * 1.5, 2.52]} s={[1.6, 0.8, 0.05]} c="#3b4650" cast={false} />)}
+            <Neon text={text} bg={bg} p={[0.9, Math.min(h - 1.5, 4.6), 2.95]} r={Math.PI / 2} />
+          </group>
+        );
+      })}
+      {[-3.6, -1.2, 1.2, 3.6].map(x => <Lantern key={x} p={[x, 2.9, 2.2]} />)}
+      <B p={[0, 3.15, 2.2]} s={[9.6, 0.03, 0.03]} c="#333" cast={false} />
+      <group position={[0, 0, 4.4]}>
+        {[-2.6, 2.6].map(x => <B key={x} p={[x, 1.8, 0]} s={[0.3, 3.6, 0.3]} c="#7a1f1f" />)}
+        <Sign text="南京路步行街 · NANJING RD" bg="#a11d1d" fg="#ffe08a" p={[0, 3.6, 0]} w={5.6} h={0.7} />
+      </group>
+    </>
+  );
+}
+
+// Yu Garden: a classical garden, a pond crossed by a zigzag bridge to a two-storey teahouse with flicked-up
+// eaves, white walls capped with grey tiles, and red lanterns
+function Yuyuan() {
+  const zig = [[-3.8, 2.8], [-2.4, 1.6], [-1.2, 2.6], [0, 1.4], [0.6, 0.3]];
+  return (
+    <>
+      <Ground c="#cfc4a8" />
+      <mesh position={[0, 0.09, 0.6]} scale={[1, 1, 0.75]}><cylinderGeometry args={[3.9, 3.9, 0.02, 32]} /><meshStandardMaterial color="#4f8f8a" roughness={0.15} /></mesh>
+      {zig.slice(1).map(([x, z], i) => {
+        const [px, pz] = zig[i], len = Math.hypot(x - px, z - pz);
+        return <B key={i} p={[(x + px) / 2, 0.35, (z + pz) / 2]} r={Math.atan2(x - px, z - pz)} s={[0.7, 0.12, len + 0.3]} c="#c9b28a" />;
+      })}
+      <group position={[1.2, 0, -0.6]}>
+        <B p={[0, 0.25, 0]} s={[2.8, 0.5, 2.8]} c="#b8ac90" />
+        {[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([a, b]) => <B key={a + ':' + b} p={[a * 1.1, 1.3, b * 1.1]} s={[0.16, 1.6, 0.16]} c="#a32020" />)}
+        <B p={[0, 1.5, 0]} s={[1.9, 1.2, 1.9]} c="#f1ead8" />
+        <ChineseRoof p={[0, 2.5, 0]} w={2.9} />
+        <B p={[0, 3.2, 0]} s={[1.5, 0.9, 1.5]} c="#f1ead8" />
+        {[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([a, b]) => <B key={'u' + a + b} p={[a * 0.8, 3.2, b * 0.8]} s={[0.12, 0.9, 0.12]} c="#a32020" />)}
+        <ChineseRoof p={[0, 4.0, 0]} w={2.1} />
+        <S p={[0, 4.55, 0]} r={0.16} c="#d4a017" />
+        {[[-1.4, 1.4], [1.4, 1.4]].map(([a, b]) => <Lantern key={a} p={[a, 2.0, b]} />)}
+      </group>
+      {[[0, -LOT + 0.2, 2 * LOT, 0.3], [-LOT + 0.2, -1.5, 0.3, 6.6], [LOT - 0.2, -1.5, 0.3, 6.6]].map(([x, z, w, d]) => (
+        <group key={x + ':' + z}>
+          <B p={[x, 1.1, z]} s={[w, 2.2, d]} c="#f4f0e6" />
+          <B p={[x, 2.3, z]} s={[w + 0.2, 0.2, d + 0.2]} c="#4b555a" />
+        </group>
+      ))}
+      <Tree x={-3.6} z={-3.4} k={0.8} pine /><Tree x={3.8} z={3.4} k={0.7} />
+      <group position={[-3.2, 0, 4.3]}>
+        {[-0.9, 0.9].map(x => <B key={x} p={[x, 1.2, 0]} s={[0.2, 2.4, 0.2]} c="#a32020" />)}
+        <Sign text="豫园 · YU GARDEN" bg="#2b2b2b" fg="#ffd166" p={[0, 2.3, 0]} w={2.4} h={0.45} />
+        <ChineseRoof p={[0, 2.75, 0]} w={2.2} h={0.5} />
+      </group>
+    </>
+  );
+}
+
+// shikumen: two rows of grey-brick lane houses facing a narrow lane, with stone door frames and black doors
+function Shikumen({ seed }) {
+  const r = rnd(seed), brick = pick(r, ['#8f8a82', '#9a8f84', '#857f78']);
+  return (
+    <>
+      <Ground c="#a8a297" />
+      {[-1, 1].map(row => (
+        <group key={row} position={[0, 0, row * 2.7]} rotation-y={row > 0 ? Math.PI : 0}>
+          {[-3.6, -1.2, 1.2, 3.6].map(x => (
+            <group key={x} position={[x, 0, 0]}>
+              <B p={[0, 2, 0]} s={[2.3, 4, 3.4]} c={brick} />
+              <B p={[0, 2.05, 1.71]} s={[2.3, 0.08, 0.02]} c="#d6cbb5" cast={false} />
+              <B p={[0, 0.95, 1.72]} s={[1.0, 1.9, 0.06]} c="#d6cbb5" cast={false} />
+              <B p={[0, 2.0, 1.73]} s={[1.2, 0.3, 0.08]} c="#d6cbb5" cast={false} />
+              <B p={[0, 0.85, 1.76]} s={[0.7, 1.6, 0.04]} c="#1d1d1d" cast={false} />
+              <B p={[0, 3.0, 1.72]} s={[0.8, 0.8, 0.04]} c="#4a3426" cast={false} />
+              {[-1, 1].map(k => (
+                <mesh key={k} position={[0, 4.35, k * 0.85]} rotation-x={-k * 0.45} castShadow>
+                  <boxGeometry args={[2.4, 0.12, 1.95]} /><meshStandardMaterial color="#4b5257" />
+                </mesh>
+              ))}
+            </group>
+          ))}
+        </group>
+      ))}
+      <group position={[-LOT + 0.2, 0, 0]} rotation-y={Math.PI / 2}>
+        {[-0.8, 0.8].map(x => <B key={x} p={[x, 1.4, 0]} s={[0.3, 2.8, 0.3]} c="#d6cbb5" />)}
+        <Sign text="石库门 · LANE" bg="#3b3b3b" fg="#f2e6c9" p={[0, 2.6, 0.17]} w={1.9} h={0.4} />
+      </group>
     </>
   );
 }
@@ -494,6 +660,10 @@ export const KINDS = {
   playground: { draw: Playground, solid: [[-2.4, -2.4, 1.4, 1.4], [2.2, -2.4, 3.2, 0.8]] },
   courts: { draw: Courts, solid: [] },
   plaza: { draw: Plaza, solid: [[0, -0.5, 2.8, 2.8], [-3, -0.5, 1.6, 6], [3, -0.5, 1.6, 6]] },
+  bund: { draw: Bund, solid: [[-0.6, 0, 7.6, 9.6]] },
+  nanjing: { draw: Nanjing, solid: [[0, -2, 9.6, 5]] },
+  yuyuan: { draw: Yuyuan, solid: [[1.2, -0.6, 2.8, 2.8], [0, -LOT + 0.2, 2 * LOT, 0.4], [-LOT + 0.2, -1.5, 0.4, 6.6], [LOT - 0.2, -1.5, 0.4, 6.6]] },
+  shikumen: { draw: Shikumen, solid: [[0, -2.7, 9.6, 3.4], [0, 2.7, 9.6, 3.4]] },
   metro: { draw: Metro, solid: [[0, -2.6, 7, 3.6], [-2.6, 1.8, 1.8, 2.8], [2.6, 1.8, 1.8, 2.8]] },
   station: { draw: Station, solid: [[0, 0, 9.8, 6]] },
   school: { draw: School, solid: [[0, -1, 10.5, 6.5], [0, 2.6, 3, 1.2]] },

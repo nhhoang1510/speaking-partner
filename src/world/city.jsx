@@ -17,18 +17,19 @@ import { KINDS, Block, signTexture, stripes } from './blocks.jsx';
 import { Bake } from './bake.jsx';
 import { Outskirts } from './outskirts.jsx';
 import { Highway, blockedHighway } from './highway.jsx';
+import { Shanghai, blockedShanghai } from './shanghai.jsx';
 
 const FAR = 260;                                             // the countryside reaches this far out
 
 const LAYOUT = [
-  ['houses', 'garden', 'pitch', 'offices', 'station', 'offices', 'shops', 'houses', 'houses'],
-  ['houses', 'park', 'flats', 'tower', 'mall', 'tower', 'flats', 'hospital', 'houses'],
-  ['metro', 'flats', 'tower', 'flats', 'school', 'tower', 'flats', 'offices', 'shops'],
-  ['houses', 'offices', 'interview', 'accounting', 'finance', 'tax', 'bank', 'market', 'houses'],
-  ['houses', 'shops', 'hotel', 'airport', 'metro', 'doctor', 'shop', 'playground', 'houses'],
-  ['houses', 'flats', 'friend', 'coffee', 'plaza', 'free', 'fuel', 'shops', 'houses'],
-  ['houses', 'lake', 'shops', 'market', 'courts', 'shops', 'houses', 'park', 'houses'],
-  ['houses', 'garden', 'houses', 'houses', 'parking', 'playground', 'lake', 'houses', 'houses'],
+  ['shikumen', 'garden', 'pitch', 'offices', 'station', 'offices', 'shops', 'houses', 'shikumen'],
+  ['houses', 'park', 'flats', 'tower', 'mall', 'tower', 'flats', 'hospital', 'bund'],
+  ['metro', 'flats', 'tower', 'flats', 'school', 'tower', 'flats', 'nanjing', 'bund'],
+  ['shikumen', 'offices', 'interview', 'accounting', 'finance', 'tax', 'bank', 'market', 'bund'],
+  ['houses', 'nanjing', 'hotel', 'airport', 'metro', 'doctor', 'shop', 'nanjing', 'bund'],
+  ['shikumen', 'flats', 'friend', 'coffee', 'plaza', 'free', 'fuel', 'shops', 'bund'],
+  ['houses', 'lake', 'nanjing', 'market', 'courts', 'shops', 'houses', 'yuyuan', 'bund'],
+  ['houses', 'garden', 'shikumen', 'shikumen', 'parking', 'playground', 'lake', 'houses', 'shikumen'],
 ];
 
 export const P = 20, BLK = 13, ROAD = P - BLK, NC = LAYOUT[0].length, NR = LAYOUT.length;
@@ -151,7 +152,7 @@ export function blockedCity(x, z) {
     }
     return ((KINDS[L.id] && KINDS[L.id].solid) || []).some(([a, b, w, d]) => Math.abs(dx - a) < w / 2 + 0.2 && Math.abs(dz - b) < d / 2 + 0.2);
   }
-  if (blockedHighway(x, z, EDGE_X, EDGE_Z, FAR)) return true;
+  if (blockedHighway(x, z, EDGE_X, EDGE_Z, FAR) || blockedShanghai(x, z, EDGE_X, EDGE_Z, FAR, ROAD)) return true;
   return PARKED.some(([a, b, r]) => Math.abs(x - a) < (r ? 2.3 : 1.15) && Math.abs(z - b) < (r ? 1.15 : 2.3));
 }
 
@@ -191,7 +192,7 @@ function Streets() {
     CELLS.forEach(({ id, x, z }) => {
       const kerb = BLK / 2 - 0.4;                                                    // along the kerb, clear of the walkers
       [-4.2, 4.2].forEach(dx => out.push({ x: x + dx, z: z + kerb }));
-      if (['park', 'pitch', 'houses', 'market', 'tower', 'flats', 'lake', 'garden', 'playground', 'courts', 'plaza'].includes(id)) return;
+      if (['park', 'pitch', 'houses', 'market', 'tower', 'flats', 'lake', 'garden', 'playground', 'courts', 'plaza', 'shikumen', 'nanjing', 'yuyuan'].includes(id)) return;
       [-1, 1].forEach(k => out.push({ x: x + k * kerb, z: z - 3 }));
     });
     return out.map((t, i) => ({ ...t, k: 0.62, pine: i % 4 === 3 }));
@@ -315,7 +316,8 @@ function Folk({ f }) {
 export function City({ walk }) {
   return (
     <group>
-      <Outskirts edgeX={EDGE_X} edgeZ={EDGE_Z} roadsX={ROADS_X} roadsZ={ROADS_Z} road={ROAD} walk={walk} />
+      <Outskirts edgeX={EDGE_X} edgeZ={EDGE_Z} roadsX={ROADS_X} roadsZ={ROADS_Z} road={ROAD} walk={walk} east={EDGE_X + 6} />
+      <Shanghai edgeX={EDGE_X} edgeZ={EDGE_Z} far={FAR} road={ROAD} />
       <Streets />
       <Highway edgeX={EDGE_X} edgeZ={EDGE_Z} far={FAR} />
       {FOLK.map((f, i) => <Folk key={i} f={f} />)}
