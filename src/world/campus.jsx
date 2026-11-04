@@ -1,18 +1,18 @@
 // Everything outside the classrooms: the building's brick shell, windows, roof and front entrance, and the
 // school grounds around it (plaza with a fountain and flags, a car park, a basketball court, a football
 // pitch, a garden with a gazebo, trees, lamps, a fence, the street and the town beyond).
-// The building occupies X0 < x < BX, |z| < BZ (one open hall); the front door is at x = BX, |z| < 1.5.
+// The building occupies X0 < x < BX, |z| < BZ (six rooms a side); the front door is at x = BX, |z| < 1.5.
 import { useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { B, C, S, Window, paint, rnd } from './props.jsx';
 
-export const COLS = 6, X0 = -33, BX = 14, BZ = 15, FENCE = { x0: -58, x1: 33.6, z0: -30, z1: 30 }, GATE = 2.6;
+export const COLS = 6, X0 = -28, BX = 14, BZ = 9, FENCE = { x0: -58, x1: 33.6, z0: -30, z1: 30 }, GATE = 2.6;
 export const CX = (X0 + BX) / 2, LEN = BX - X0;
-export const ROOM_XS = Array.from({ length: COLS }, (_, k) => X0 + (BX - X0) * (k + 0.5) / COLS);   // window bays along the long walls
+export const ROOM_XS = Array.from({ length: COLS }, (_, k) => X0 + 3.5 + k * 7);
 
 // ---------------------------------------------------------------- textures
-export function tex(kind, repeat) {
+function tex(kind, repeat) {
   return paint(kind, 256, 256, (g, w, h) => {
     const r = rnd(kind.length * 131 + 7);
     if (kind === 'grass') {
@@ -43,7 +43,7 @@ export function tex(kind, repeat) {
 }
 
 // one mesh drawn many times (fence posts, flowers, tree trunks...)
-export function Many({ at, geo, c, cast = true, e }) {
+function Many({ at, geo, c, cast = true, e }) {
   const ref = useRef();
   useLayoutEffect(() => {
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3();
@@ -92,7 +92,7 @@ export function Shell({ full, tall, low }) {
       {(hN > 2 ? ROOM_XS : []).flatMap(x => [x - 1.7, x + 1.7]).map(x => <Window key={'wn' + x} p={[x, 1.45, -BZ - o - 0.09]} r={Math.PI} w={1.6} />)}
       {full && ROOM_XS.flatMap(x => [x - 1.7, x + 1.7]).map(x => <Window key={'ws' + x} p={[x, 1.45, BZ + o + 0.09]} w={1.6} />)}
       {full && ROOM_XS.flatMap(x => [x - 1.7, x + 1.7]).map(x => <Window key={'wsi' + x} p={[x, 1.45, BZ - 0.18]} r={Math.PI} w={1.6} />)}
-      {hW > 2 && [-8.5, 8.5].map(z => <Window key={'ww' + z} p={[X0 - o - 0.09, 1.45, z]} r={-Math.PI / 2} w={2.2} />)}
+      {hW > 2 && [-5.25, 5.65].map(z => <Window key={'ww' + z} p={[X0 - o - 0.09, 1.45, z]} r={-Math.PI / 2} w={2.2} />)}
       {full && [-5.5, 5.5].map(z => <Window key={'we' + z} p={[BX + o + 0.09, 1.45, z]} r={Math.PI / 2} w={2.6} />)}
       <Entrance full={full} />
       {full && <Roof />}
@@ -156,10 +156,10 @@ function Roof() {
 const TREES = (() => {
   const r = rnd(4242), out = [];
   // along the fence
-  for (let x = FENCE.x0 + 3; x < FENCE.x1 - 2; x += 6.5) { out.push([x, FENCE.z0 + 2.2]); if ((x < 14 && (x < -12 || x > -4)) || x > 34) out.push([x, FENCE.z1 - 2.2]); }
+  for (let x = FENCE.x0 + 3; x < FENCE.x1 - 2; x += 6.5) { out.push([x, FENCE.z0 + 2.2]); if (x < 14 || x > 34) out.push([x, FENCE.z1 - 2.2]); }
   for (let z = FENCE.z0 + 8; z < FENCE.z1 - 6; z += 7) out.push([FENCE.x0 + 2.2, z]);
   // scattered on the lawns
-  [[-25, -18], [-24, 17.5], [-30, 22], [8, -17], [12, -22], [-16, 17.5], [0, 26.5], [7, 17.5], [-33, -20], [-36.5, 17], [-52, -20], [-52, 18],
+  [[-25, -18], [-22, 17], [-30, 22], [8, -17], [12, -22], [-16, 13], [-1, 24], [6, 14], [-33, -20], [-34, 12], [-52, -20], [-52, 18],
    [17, -10], [27, -11], [17, 10.5], [27, -22], [-18, -24]].forEach(p => out.push(p));
   return out.map(([x, z], i) => ({ x, z, k: 0.85 + r() * 0.5, pine: i % 3 === 1 }));
 })();
@@ -176,7 +176,7 @@ export function blockedOutside(x, z) {
   return false;
 }
 
-export function Tree({ x, z, k, pine }) {
+function Tree({ x, z, k, pine }) {
   return (
     <group position={[x, 0, z]} scale={k}>
       <C p={[0, 0.9, 0]} r={0.16} r2={0.22} h={1.8} c="#7a5236" seg={8} />
@@ -191,7 +191,7 @@ export function Tree({ x, z, k, pine }) {
   );
 }
 
-export function Car({ x, z, c, r = 0 }) {
+function Car({ x, z, c, r = 0 }) {
   return (
     <group position={[x, 0, z]} rotation-y={r}>
       <B p={[0, 0.55, 0]} s={[1.75, 0.6, 4.1]} c={c} metal={0.5} rough={0.3} />
@@ -204,7 +204,7 @@ export function Car({ x, z, c, r = 0 }) {
   );
 }
 
-export function Lamp({ x, z }) {
+function Lamp({ x, z }) {
   return (
     <group position={[x, 0, z]}>
       <C p={[0, 1.6, 0]} r={0.05} h={3.2} c="#3a3f45" metal={0.6} seg={8} />
@@ -214,7 +214,7 @@ export function Lamp({ x, z }) {
   );
 }
 
-export function Bench({ x, z, r = 0 }) {
+function Bench({ x, z, r = 0 }) {
   return (
     <group position={[x, 0, z]} rotation-y={r}>
       {[0, 0.13, 0.26].map(dz => <B key={dz} p={[0, 0.45, dz - 0.13]} s={[1.6, 0.05, 0.1]} c="#a8744b" />)}
@@ -265,7 +265,7 @@ function Fountain() {
 function Court() {           // basketball, north of the building
   const L = (x, z, w, d) => <Flat key={x + ':' + z + ':' + w} x={x} z={z} w={w} d={d} y={0.025} c="#f4f1ea" />;
   return (
-    <group position={[-4, 0, -21.5]}>
+    <group position={[-4, 0, -20.5]}>
       <Flat x={0} z={0} w={17} d={10} y={0.015} c="#3f6f9e" />
       <Flat x={0} z={0} w={15} d={8} y={0.02} c="#c76a3e" />
       {L(0, -4, 15, 0.08)}{L(0, 4, 15, 0.08)}{L(-7.5, 0, 0.08, 8)}{L(7.5, 0, 0.08, 8)}{L(0, 0, 0.08, 8)}
@@ -303,16 +303,16 @@ function Garden() {          // south lawn: paths, flower beds, a gazebo and ben
   const pave = useMemo(() => tex('paving', [8, 1]), []);
   const flowers = useMemo(() => {
     const r = rnd(77), out = { a: [], b: [], c: [] };
-    [[-20, 19.5], [-13, 26.3], [4, 20], [-4, 17.3]].forEach(([x, z]) => {
+    [[-20, 16], [-12, 23], [4, 17], [-4, 13.5]].forEach(([x, z]) => {
       for (let i = 0; i < 40; i++) { const a = r() * 6.28, d = Math.sqrt(r()) * 1.3; out['abc'[i % 3]].push([x + Math.cos(a) * d, 0.2, z + Math.sin(a) * d * 0.7, 0.8 + r() * 0.5]); }
     });
     return out;
   }, []);
   return (
     <group>
-      <Flat x={-11} z={22.5} w={30} d={1.6} y={0.012} map={pave} />
-      <Flat x={-8} z={18.75} w={1.6} d={7.5} y={0.013} map={pave} />
-      {[[-20, 19.5], [-13, 26.3], [4, 20], [-4, 17.3]].map(([x, z]) => (
+      <Flat x={-11} z={19} w={30} d={1.6} y={0.012} map={pave} />
+      <Flat x={-8} z={14} w={1.6} d={10} y={0.013} map={pave} />
+      {[[-20, 16], [-12, 23], [4, 17], [-4, 13.5]].map(([x, z]) => (
         <group key={x + ':' + z} position={[x, 0, z]} scale={[1, 1, 0.7]}>
           <C p={[0, 0.1, 0]} r={1.6} h={0.2} c="#8a6a4e" seg={24} />
         </group>
@@ -320,14 +320,14 @@ function Garden() {          // south lawn: paths, flower beds, a gazebo and ben
       <Many geo={<sphereGeometry args={[0.13, 6, 5]} />} c="#e84a5f" cast={false} at={flowers.a} />
       <Many geo={<sphereGeometry args={[0.13, 6, 5]} />} c="#ffd166" cast={false} at={flowers.b} />
       <Many geo={<sphereGeometry args={[0.13, 6, 5]} />} c="#b388eb" cast={false} at={flowers.c} />
-      <group position={[-8, 0, 26.3]}>
+      <group position={[-8, 0, 23]}>
         <C p={[0, 0.1, 0]} r={2.4} h={0.2} c="#d8d2c8" seg={6} />
         {[0, 1, 2, 3, 4, 5].map(k => <C key={k} p={[Math.cos(k * Math.PI / 3) * 2.1, 1.3, Math.sin(k * Math.PI / 3) * 2.1]} r={0.08} h={2.4} c="#f4efe6" seg={8} />)}
         <mesh position={[0, 3.05, 0]} castShadow><coneGeometry args={[2.9, 1.3, 6]} /><meshStandardMaterial color="#8c3b2e" /></mesh>
         <C p={[0, 0.45, 0]} r={0.6} h={0.06} c="#a8744b" />
         <C p={[0, 0.22, 0]} r={0.08} h={0.44} c="#3a3f45" />
       </group>
-      <Bench x={-15} z={21.5} /><Bench x={-1} z={21.5} /><Bench x={-24} z={23.7} r={Math.PI} />
+      <Bench x={-15} z={18} /><Bench x={-1} z={18} /><Bench x={-24} z={20.2} r={Math.PI} />
     </group>
   );
 }
@@ -396,7 +396,7 @@ function Fence() {
   );
 }
 
-export function Clouds() {
+function Clouds() {
   const puffs = useMemo(() => {
     const r = rnd(9), out = [];
     for (let c = 0; c < 12; c++) {
@@ -412,7 +412,7 @@ export function Campus({ walk }) {
   const grass = useMemo(() => tex('grass', [60, 60]), []);
   const pave = useMemo(() => tex('paving', [6, 6]), []);
   const pave2 = useMemo(() => tex('paving', [8, 1]), []);
-  const lamps = [[16, -7], [16, 7], [26, -7], [26, 7], [33, -3.5], [33, 3.5], [-17, -17], [-17, 17], [5, 17], [-11, 17], [-6, -16.5]];
+  const lamps = [[16, -7], [16, 7], [26, -7], [26, 7], [33, -3.5], [33, 3.5], [-17, -14], [-17, 14], [5, 11.5], [-12, 11.5], [-4, -13.5]];
   return (
     <group>
       <Flat x={0} z={0} w={260} d={260} y={-0.02} map={grass} />
@@ -424,7 +424,7 @@ export function Campus({ walk }) {
       <Flat x={20.5} z={0} w={13} d={15} y={0.01} map={pave} />
       <Flat x={30.5} z={0} w={7} d={3.2} y={0.011} map={pave2} />
       <Flat x={X0 - 1.5} z={0} w={3} d={2.5} y={0.011} map={pave2} />
-      <Flat x={-4} z={-15.75} w={1.6} d={1.5} y={0.011} map={pave2} r={0} />
+      <Flat x={-4} z={-11.5} w={1.6} d={4} y={0.011} map={pave2} r={0} />
       <Fountain />
       <Flag x={17.5} z={-5.5} c1="#2e86de" c2="#ffffff" phase={0} />
       <Flag x={18.5} z={-5.5} c1="#c0392b" c2="#f5d76e" h={6.5} phase={1} />

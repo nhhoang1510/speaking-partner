@@ -165,6 +165,17 @@ export function Frame({ p, w = 0.8, h = 0.6, c = '#7fa6c9', r = 0 }) {     // a 
     </group>
   );
 }
+export function Window({ p, w = 1.8, h = 1.1, r = 0 }) {
+  return (
+    <group position={p} rotation-y={r}>
+      <B p={[0, 0, 0]} s={[w + 0.12, h + 0.12, 0.1]} c="#f7f4ee" cast={false} />
+      <B p={[0, 0, 0.03]} s={[w, h, 0.06]} c="#bfe0f2" e="#bfe0f2" ei={0.35} rough={0.1} cast={false} />
+      <B p={[0, 0, 0.07]} s={[0.05, h, 0.02]} c="#f7f4ee" cast={false} /><B p={[0, 0, 0.07]} s={[w, 0.05, 0.02]} c="#f7f4ee" cast={false} />
+      <B p={[0, -h / 2 - 0.1, 0.1]} s={[w + 0.25, 0.06, 0.22]} c="#ece6db" cast={false} />
+    </group>
+  );
+}
+
 export function Pendant({ p, c = '#2f2f2f' }) {      // a hanging lamp
   return (
     <group position={p}>
@@ -543,4 +554,35 @@ export function Furniture({ id, hue, north }) {
         <Pendant p={[0, 2.7, 1]} c={deep} />
       </group>);
   }
+}
+
+// ---------------------------------------------------------------- the corridor
+export function CorridorDecor({ x0, x1, hall }) {
+  const lockers = [];
+  for (let x = x0 + 1.2; x < x1 - 1; x += 7) {
+    // lockers against the north corridor wall, between the doors
+    for (let k = 0; k < 3; k++) lockers.push(
+      <group key={x + ':' + k} position={[x + k * 0.5, 0, -hall + 0.25]}>
+        <B p={[0, 0.85, 0]} s={[0.46, 1.7, 0.4]} c={['#5b8def', '#4a7bd8', '#6a99f0'][k]} metal={0.4} rough={0.4} />
+        <B p={[0.15, 1.1, 0.205]} s={[0.04, 0.12, 0.01]} c="#ddd" cast={false} />
+        {[1.5, 1.45, 1.4].map(y => <B key={y} p={[0, y, 0.205]} s={[0.3, 0.015, 0.01]} c="#2d4f9b" cast={false} />)}
+      </group>
+    );
+  }
+  return (
+    <group>
+      {lockers}
+      {Array.from({ length: Math.round((x1 - x0) / 7) - 1 }, (_, k) => x0 + 7 + k * 7).map(x => (
+        <group key={x} position={[x, 0, hall - 0.35]}>
+          <B p={[0, 0.42, 0]} s={[1.6, 0.06, 0.4]} c="#a0704a" />
+          {[-0.7, 0.7].map(dx => <B key={dx} p={[dx, 0.2, 0]} s={[0.06, 0.4, 0.36]} c="#555" />)}
+        </group>
+      ))}
+      <group position={[x0 + 12.8, 1.6, -hall + 0.12]}>
+        <B p={[0, 0, 0]} s={[1.4, 0.9, 0.04]} c="#b5835a" cast={false} />
+        {[[-0.35, 0.15, '#ffd166'], [0.2, 0.2, '#9be3c4'], [-0.15, -0.2, '#f4a6a0'], [0.4, -0.15, '#cfe3ff']].map(([x, y, c]) => <B key={x} p={[x, y, 0.03]} s={[0.36, 0.3, 0.01]} c={c} cast={false} />)}
+      </group>
+      {Array.from({ length: Math.round((x1 - x0) / 7) }, (_, k) => x0 + 3.5 + k * 7).map(x => <Pendant key={x} p={[x, 2.6, 0]} c="#e9e2d6" />)}
+    </group>
+  );
 }
