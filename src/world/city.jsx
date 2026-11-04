@@ -1,35 +1,38 @@
-// The school as a little low-poly Shanghai: a grid of streets named after Puxi's, lined with plane trees, with
-// lane markings, zebra crossings, traffic lights and taxis driving round the blocks. Every practice scene has its own building on its own block (a café, a
-// bank, a hotel, a clinic...), with a glass shop front and an open top so the overview can look inside. The
-// blocks around them hold the school itself, offices, flats, shops, houses, parks, a market, a hospital, a
-// station... (see blocks.jsx), and beyond the last street lies the countryside (outskirts.jsx).
+// Our little Shanghai: the old centre of Puxi on a grid of streets named after its real ones, lined with plane
+// trees, with taxis driving round. Every practice scene has its own building on its own block (a café, a bank,
+// a hotel, a clinic...), with a glass shop front and an open top so the overview can look inside. Round them
+// stand the districts (blocks.jsx): the Bund along the river, Nanjing Road, People's Square with the museum and
+// the theatre, Jing'an Temple, the old French Concession's villas, Xintiandi and the shikumen lanes, the old
+// town by Yu Garden. East across the Huangpu is Pudong (shanghai.jsx); all round, the rest of the city
+// (skyline.jsx), with Suzhou Creek to the north.
 //
-// To grow the town: edit LAYOUT below (keep tall kinds behind or left of the practice buildings, so they don't
-// hide them from the overview camera, which looks from the south-east). Each cell is a scene id (a practice building: add its look to LOOK) or
-// the name of a block kind from KINDS in blocks.jsx. Add rows or columns freely: streets, pavements, walking
-// routes, traffic and the countryside all follow the grid. Every building's door faces +z (towards the
-// overview camera). Blocks are BLK square, P apart; streets run between them.
+// To change the town: edit LAYOUT below (keep tall kinds behind or left of the practice buildings, so they
+// don't hide them from the overview camera, which looks from the south-east). Each cell is a scene id (a
+// practice building: add its look to LOOK) or the name of a block kind from KINDS in blocks.jsx. Streets,
+// pavements, walking routes and traffic follow the grid. Every building's door faces +z (towards the overview
+// camera). Blocks are BLK square, P apart; streets run between them.
 import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { B, C, S, paint, rnd } from './props.jsx';
 import { Many, Tree, Car, Lamp, tex } from './scenery.jsx';
 import { KINDS, Block, Neon, Lantern, signTexture, stripes } from './blocks.jsx';
 import { Bake } from './bake.jsx';
-import { Outskirts } from './outskirts.jsx';
-import { Highway, blockedHighway } from './highway.jsx';
-import { Shanghai, blockedShanghai } from './shanghai.jsx';
+import { Skyline } from './skyline.jsx';
+import { Shanghai, blockedShanghai, layout } from './shanghai.jsx';
 
-export const FAR = 260;                                             // the countryside reaches this far out
+export const FAR = 260;                                             // the city reaches this far out
 
+// north at the top; the Bund down the east side, Nanjing Road (the street below row 2) running west from it to
+// People's Square; the old French Concession down the west side; Xintiandi and the old town to the south
 const LAYOUT = [
-  ['shikumen', 'garden', 'pitch', 'offices', 'station', 'offices', 'shops', 'houses', 'shikumen'],
-  ['houses', 'park', 'flats', 'tower', 'mall', 'tower', 'flats', 'hospital', 'bund'],
-  ['metro', 'flats', 'tower', 'flats', 'school', 'tower', 'flats', 'nanjing', 'bund'],
-  ['shikumen', 'offices', 'interview', 'accounting', 'finance', 'tax', 'bank', 'market', 'bund'],
-  ['houses', 'nanjing', 'hotel', 'airport', 'metro', 'doctor', 'shop', 'nanjing', 'bund'],
-  ['shikumen', 'flats', 'friend', 'coffee', 'plaza', 'free', 'fuel', 'shops', 'bund'],
-  ['houses', 'lake', 'nanjing', 'market', 'courts', 'shops', 'houses', 'yuyuan', 'bund'],
-  ['houses', 'garden', 'shikumen', 'shikumen', 'parking', 'playground', 'lake', 'houses', 'shikumen'],
+  ['jingan', 'tower', 'flats', 'tower', 'tower', 'offices', 'tower', 'flats', 'bund'],
+  ['tower', 'offices', 'park', 'museum', 'nanjing', 'nanjing', 'nanjing', 'dept', 'bund'],
+  ['flats', 'tower', 'theatre', 'square', 'metro', 'tower', 'offices', 'shops', 'bund'],
+  ['villas', 'shikumen', 'interview', 'accounting', 'finance', 'tax', 'bank', 'shops', 'bund'],
+  ['villas', 'wukang', 'hotel', 'airport', 'metro', 'doctor', 'shop', 'shops', 'bund'],
+  ['villas', 'fuxing', 'friend', 'coffee', 'xintiandi', 'free', 'shikumen', 'oldcity', 'bund'],
+  ['villas', 'villas', 'shikumen', 'xintiandi', 'shikumen', 'yuyuan', 'oldcity', 'oldcity', 'bund'],
+  ['villas', 'shikumen', 'villas', 'shikumen', 'fuxing', 'shikumen', 'yuyuan', 'oldcity', 'bund'],
 ];
 
 export const P = 20, BLK = 13, ROAD = P - BLK, NC = LAYOUT[0].length, NR = LAYOUT.length;
@@ -163,7 +166,9 @@ export function blockedCity(x, z) {
     }
     return ((KINDS[L.id] && KINDS[L.id].solid) || []).some(([a, b, w, d]) => Math.abs(dx - a) < w / 2 + 0.2 && Math.abs(dz - b) < d / 2 + 0.2);
   }
-  if (blockedHighway(x, z, EDGE_X, EDGE_Z, FAR) || blockedShanghai(x, z, EDGE_X, EDGE_Z, FAR, ROAD)) return true;
+  // the walkable part ends at the creek to the north, the pavements to the west and south, and Pudong's far side
+  if (z < -EDGE_Z - ROAD / 2 - 1.2 || z > EDGE_Z + ROAD / 2 + 3 || x < -EDGE_X - ROAD / 2 - 1.2 || x > FAR - 30) return true;
+  if (blockedShanghai(x, z, EDGE_X, EDGE_Z, FAR, ROAD)) return true;
   return PARKED.some(([a, b, r]) => Math.abs(x - a) < (r ? 2.3 : 1.15) && Math.abs(z - b) < (r ? 1.15 : 2.3));
 }
 
@@ -203,7 +208,7 @@ function Streets() {
     CELLS.forEach(({ id, x, z }) => {
       const kerb = BLK / 2 - 0.4;                                                    // along the kerb, clear of the walkers
       [-4.2, 4.2].forEach(dx => out.push({ x: x + dx, z: z + kerb }));
-      if (['park', 'pitch', 'houses', 'market', 'tower', 'flats', 'lake', 'garden', 'playground', 'courts', 'plaza', 'shikumen', 'nanjing', 'yuyuan'].includes(id)) return;
+      if (['park', 'fuxing', 'square', 'villas', 'tower', 'flats', 'shikumen', 'xintiandi', 'nanjing', 'yuyuan', 'oldcity', 'jingan', 'museum', 'wukang'].includes(id)) return;
       [-1, 1].forEach(k => out.push({ x: x + k * kerb, z: z - 3 }));
     });
     return out.map(t => ({ ...t, k: 0.62, plane: true }));
@@ -345,14 +350,15 @@ function Folk({ f }) {
   );
 }
 
+const RIVER = layout(EDGE_X, EDGE_Z, FAR);
+
 // ---------------------------------------------------------------- the whole town
 export function City({ walk }) {
   return (
     <group>
-      <Outskirts edgeX={EDGE_X} edgeZ={EDGE_Z} roadsX={ROADS_X} roadsZ={ROADS_Z} road={ROAD} walk={walk} east={EDGE_X + 6} />
+      <Skyline edgeX={EDGE_X} edgeZ={EDGE_Z} far={FAR} west={RIVER.west} east={RIVER.east} walk={walk} />
       <Shanghai edgeX={EDGE_X} edgeZ={EDGE_Z} far={FAR} road={ROAD} />
       <Streets />
-      <Highway edgeX={EDGE_X} edgeZ={EDGE_Z} far={FAR} />
       {FOLK.map((f, i) => <Folk key={i} f={f} />)}
       {CELLS.filter(L => !LOOK[L.id] && KINDS[L.id]).map(L => {
         const Kind = KINDS[L.id].draw;

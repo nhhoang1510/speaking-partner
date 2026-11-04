@@ -1,4 +1,4 @@
-// Shanghai beyond the east edge of town: the Huangpu river running north into the creek, the riverside walk
+// Shanghai beyond the east edge of town: the Huangpu river running north past Suzhou Creek, the riverside walk
 // of the Bund on this bank, a cable-stayed bridge carrying the road east, ferries, and across the water
 // Pudong's Lujiazui: the Oriental Pearl Tower, Jin Mao, the "bottle opener" and the twisting Shanghai Tower
 // among glass towers, with Century Avenue running through. All of it is east or north of the practice
@@ -16,7 +16,7 @@ import { Night } from './time.js';
 export function layout(edgeX, edgeZ, far) {
   const rx = edgeX + 24, rw = 26;
   return {
-    rx, rw, west: rx - rw / 2, east: rx + rw / 2, north: -edgeZ - 24, far,
+    rx, rw, west: rx - rw / 2, east: rx + rw / 2, north: -edgeZ - 24, bund: -edgeZ - 5.5, far,
     pearl: [rx + 28, -45], jinmao: [rx + 51, -35], swfc: [rx + 71, -48], tower: [rx + 64, -18],
     // other glass towers in Pudong: [x, z, height]
     towers: [[rx + 26, 20, 45], [rx + 26, 42, 30], [rx + 96, 18, 55], [rx + 112, 18, 40], [rx + 96, 40, 35], [rx + 112, 42, 50],
@@ -27,7 +27,7 @@ export function layout(edgeX, edgeZ, far) {
 // walking: the river (except on the bridge) and the towers' feet
 export function blockedShanghai(x, z, edgeX, edgeZ, far, road) {
   const L = layout(edgeX, edgeZ, far);
-  if (x > L.west + 0.6 && x < L.east - 0.6 && z > L.north && Math.abs(z) > road / 2 + 0.6) return true;
+  if (x > L.west + 0.6 && x < L.east - 0.6 && Math.abs(z) > road / 2 + 0.6) return true;
   if (x < L.east) return false;
   const near = ([a, b], r) => Math.abs(x - a) < r && Math.abs(z - b) < r;
   return near(L.pearl, 4) || near(L.jinmao, 5.5) || near(L.swfc, 7) || near(L.tower, 8.5) || L.towers.some(([a, b]) => near([a, b], 4.8))
@@ -271,25 +271,23 @@ function fill(L, road) {
 // ---------------------------------------------------------------- everything together
 export function Shanghai({ edgeX, edgeZ, far, road }) {
   const L = useMemo(() => layout(edgeX, edgeZ, far), [edgeX, edgeZ, far]);
-  const len = far - L.north;
+  const len = far - L.bund;                                   // the Bund's walk, from the creek southwards
   const more = fillOf(L, road);
-  const bundLamps = useMemo(() => Array.from({ length: Math.floor((edgeZ * 2 + 40) / 12) }, (_, i) => -edgeZ - 10 + i * 12).filter(z => Math.abs(z) > road / 2 + 2), [edgeZ, road]);
+  const bundLamps = useMemo(() => Array.from({ length: Math.floor((edgeZ * 2 + 40) / 12) }, (_, i) => -edgeZ - 10 + i * 12).filter(z => Math.abs(z) > road / 2 + 2 && z > -edgeZ - 4), [edgeZ, road]);
   return (
     <group>
       {/* the river with stone embankments */}
-      <B p={[L.rx, 0.035, (L.north + far) / 2]} s={[L.rw, 0.02, len]} c="#4d8fb3" rough={0.15} metal={0.2} cast={false} />
-      {[L.west - 0.8, L.east + 0.8].map(x => <B key={x} p={[x, 0.3, (L.north + 10 + far) / 2]} s={[1.6, 0.6, len - 10]} c="#b3ab9c" />)}
+      <B p={[L.rx, 0.035, 0]} s={[L.rw, 0.02, 2 * far]} c="#4d8fb3" rough={0.15} metal={0.2} cast={false} />
+      {[L.west - 0.8, L.east + 0.8].map(x => <B key={x} p={[x, 0.3, 0]} s={[1.6, 0.6, 2 * far]} c="#b3ab9c" />)}
       {/* the Bund's riverside walk: paving, a railing along the water, lamps and trees */}
-      <B p={[(edgeX + road / 2 + L.west - 1.6) / 2, 0.04, (L.north + 10 + far) / 2]} s={[L.west - 1.6 - edgeX - road / 2, 0.04, len - 10]} c="#d9d0bf" cast={false} />
-      <B p={[L.west - 1.4, 1.0, (L.north + 10 + far) / 2]} s={[0.12, 0.9, len - 10]} c="#5b5f63" metal={0.5} />
+      <B p={[(edgeX + road / 2 + L.west - 1.6) / 2, 0.04, (L.bund + far) / 2]} s={[L.west - 1.6 - edgeX - road / 2, 0.04, len]} c="#d9d0bf" cast={false} />
+      <B p={[L.west - 1.4, 1.0, (L.bund + far) / 2]} s={[0.12, 0.9, len]} c="#5b5f63" metal={0.5} />
       {bundLamps.map(z => <group key={z}><Lamp x={L.west - 3} z={z} />{Math.abs(z) % 24 < 12 && <Tree x={edgeX + road / 2 + 1.5} z={z + 6} k={0.7} />}</group>)}
       <mesh position={[edgeX + road / 2 + 1.2, 2.2, 12]} rotation-y={Math.PI / 2}>
         <planeGeometry args={[3.6, 0.7]} /><meshStandardMaterial map={signTexture('外滩 · THE BUND', '#7a1f1f', '#ffe08a')} />
       </mesh>
       <Bridge L={L} road={road} />
-      {/* metro line 2 on a viaduct from the Bund over the river to Lujiazui, and the maglev out east */}
-      <Viaduct x0={edgeX + road / 2 + 1} x1={L.rx + 40} y={9} z={-24} />
-      <Shuttle x0={edgeX + road / 2 + 1} x1={L.rx + 40} y={9} z={-24} speed={7} cars={4} body="#f2f4f5" stripe="#8bc34a" />
+      {/* the maglev out east */}
       <Viaduct x0={L.east + 4} x1={far - 10} y={6} z={-65} w={3.6} />
       <Shuttle x0={L.east + 4} x1={far - 10} y={6} z={-65} speed={28} cars={3} nose body="#f7f7f7" stripe="#1f6fb2" />
       <Plane />
