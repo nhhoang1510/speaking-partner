@@ -173,11 +173,11 @@ function Learner({ u, target, me, now, pilot, viewer }) {
 const step = new THREE.Vector3();
 function drive(pilot, p, g, t, dt) {
   const k = pilot.input;
-  if (pilot.goto && ROOMS[pilot.goto]) {
-    // taken to a building from the map: stand at its door, facing in
-    const at = mouth(ROOMS[pilot.goto]);
-    p.x = at.x; p.z = at.z + 1.2; pilot.goto = null;
-    pilot.yaw = pilot.wantYaw = 0; pilot.pitch = pilot.wantPitch = -0.05; pilot.sent = 0;
+  if (pilot.goto) {
+    // taken to a building from the map: stand at its door, facing in (or to a spot { x, z, yaw })
+    const g = pilot.goto, at = ROOMS[g] ? mouth(ROOMS[g]).add(new THREE.Vector3(0, 0, 1.2)) : g;
+    p.x = at.x; p.z = at.z; pilot.goto = null;
+    pilot.yaw = pilot.wantYaw = at.yaw || 0; pilot.pitch = pilot.wantPitch = -0.05; pilot.sent = 0;
   }
   if (pilot.fresh) {
     // just stepped into my character: stand somewhere legal and look out of the door / down the street
@@ -366,6 +366,7 @@ export default function School({ users, meId, stars = {}, sky = 'auto', focus, f
   const pilot = useMemo(() => ({ pos: new THREE.Vector3(), room: undefined, input: {}, yaw: Math.PI / 2, pitch: -0.05 }), []);
   Object.assign(pilot, { on: walk, input: input || pilot.input, onMove, onRoom });
   if (track) track.current = walk ? pilot : null;
+  if (import.meta.env.DEV) window.__pilot = pilot;
   useEffect(() => { pilot.room = undefined; pilot.sent = 0; pilot.fresh = true; pilot.pitch = pilot.wantPitch = -0.05; pilot.wantYaw = null; }, [walk]);
 
   useEffect(() => {

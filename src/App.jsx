@@ -4,7 +4,7 @@ import { Engine, canListen } from './lib/engine.js';
 import { checkAI } from './lib/llm.js';
 import { SCENES, LEVELS } from './scenes.js';
 import { Room, COLORS, loadMe, saveMe } from './lib/room.js';
-import { loadHistory, saveSession, deleteSession, snapshot, memoryFor, progress, stars } from './lib/history.js';
+import { loadHistory, saveSession, deleteSession, snapshot, memoryFor, progress, stars, notebook, loadKnown, saveKnown } from './lib/history.js';
 import { Listener, voiceFor } from './lib/listen.js';
 
 // the whole app is the 3D school; panels float around it
@@ -223,6 +223,8 @@ export default function App() {
         <aside className="panel right" aria-label={s.scene ? 'Hội thoại' : 'Hoạt động'}>
           {s.scene ? <Talk s={s} eng={eng} cfg={cfg} onClose={leave} />
             : right === 'feed' ? <Feed feed={feed} ai={ai} tabs={<RightTabs right={right} setRight={setRight} />} />
+            : right === 'notes' ? <Notebook history={history} tabs={<RightTabs right={right} setRight={setRight} />}
+                onSay={t => { listener.stop(); listener.unlock(); listener.say(t, 'hannah'); }} />
             : right === 'history' ? <History history={history} prog={prog} tabs={<RightTabs right={right} setRight={setRight} />} onOpen={setRight}
                 onDelete={id => setHistory(deleteSession(id))} />
             : <Session x={right} onBack={() => setRight('history')} onAgain={() => pick(SCENE[right.scene])} />}
@@ -350,7 +352,7 @@ function People({ users, meId, ok, listening, onListen }) {
 function RightTabs({ right, setRight }) {
   return (
     <div className="tabs" role="tablist">
-      {[['feed', 'Hoạt động'], ['history', 'Lịch sử']].map(([k, label]) => (
+      {[['feed', 'Hoạt động'], ['history', 'Lịch sử'], ['notes', 'Sổ tay']].map(([k, label]) => (
         <button key={k} role="tab" aria-selected={right === k} className={right === k ? 'on' : ''} onClick={() => setRight(k)}>{label}</button>
       ))}
     </div>
@@ -427,6 +429,47 @@ function History({ history, prog, tabs, onOpen, onDelete }) {
           );
         })}
         {!history.length && <li className="muted small">Chưa có buổi luyện nào. Vào một phòng và nói vài câu nhé.</li>}
+      </ul>
+    </section>
+  );
+}
+
+// the notebook: corrections and useful phrases from every session, to listen to again and tick off
+function Notebook({ history, tabs, onSay }) {
+  const [known, setKnown] = useState(loadKnown);
+  const [show, setShow] = useState('todo');
+  const all = useMemo(() => notebook(history), [history]);
+  const todo = all.filter(x => !known.has(x.text)), done = all.filter(x => known.has(x.text));
+  const list = show === 'todo' ? todo : done;
+  const toggle = text => setKnown(k => { const n = new Set(k); n.has(text) ? n.delete(text) : n.add(text); saveKnown(n); return n; });
+  return (
+    <section className="glass sec notebook">
+      {tabs}
+      <p className="muted small">Câu được sửa và cụm từ hay từ các buổi luyện. Bấm loa để nghe, đánh dấu khi đã thuộc.</p>
+      <div className="nb-filter" role="radiogroup">
+        <button role="radio" aria-checked={show === 'todo'} className={show === 'todo' ? 'on' : ''} onClick={() => setShow('todo')}>Cần ôn <span>{todo.length}</span></button>
+        <button role="radio" aria-checked={show === 'done'} className={show === 'done' ? 'on' : ''} onClick={() => setShow('done')}>Đã thuộc <span>{done.length}</span></button>
+      </div>
+      <ul>
+        {list.map(x => {
+          const sc = SCENE[x.scene];
+          return (
+            <li key={x.text} className={'nb-item ' + x.kind} style={{ '--h': sc ? sc.hue : 150 }}>
+              <button className="nb-say" onClick={() => onSay(x.text)} aria-label={`Nghe: ${x.text}`} title="Nghe">
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z" /></svg>
+              </button>
+              <div className="nb-t">
+                <b>{x.text}</b>
+                {x.kind === 'fix' && x.said && <s>{x.said}</s>}
+                {x.note && <span>{x.note}</span>}
+                <small>{x.kind === 'fix' ? 'Câu sửa' : 'Cụm từ'} · {sc ? sc.title : x.scene}</small>
+              </div>
+              <button className={'nb-known' + (known.has(x.text) ? ' on' : '')} onClick={() => toggle(x.text)}
+                aria-pressed={known.has(x.text)} title={known.has(x.text) ? 'Bỏ đánh dấu' : 'Đã thuộc'}>✓</button>
+            </li>
+          );
+        })}
+        {!list.length && <li className="muted small">{show === 'todo' ? (all.length ? 'Đã thuộc hết. Giỏi lắm!' : 'Chưa có gì. Luyện một buổi và bấm "Kết thúc & nhận xét" để có cụm từ mới.') : 'Chưa đánh dấu câu nào.'}</li>}
       </ul>
     </section>
   );
