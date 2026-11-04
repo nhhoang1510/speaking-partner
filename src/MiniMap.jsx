@@ -2,8 +2,8 @@
 // Pudong with its landmarks, and me as an arrow pointing where I look, with the name of where I am. Tap a
 // practice building, or a landmark, to be taken there.
 import { useEffect, useRef } from 'react';
-import { CELLS, BLK, P, EDGE_X, EDGE_Z, FAR } from './world/city.jsx';
-import { layout } from './world/shanghai.jsx';
+import { CELLS, BLK, P, ROAD, EDGE_X, EDGE_Z, FAR } from './world/city.jsx';
+import { layout, fillOf } from './world/shanghai.jsx';
 import { SCENES } from './scenes.js';
 
 const SCENE = Object.fromEntries(SCENES.map(s => [s.id, s]));
@@ -21,6 +21,7 @@ const NAMES = {
   nanjing: 'Phố đi bộ Nam Kinh', yuyuan: 'Dự Viên', shikumen: 'Ngõ Thạch Khố Môn',
 };
 const L = layout(EDGE_X, EDGE_Z, FAR);
+const PUDONG = fillOf(L, ROAD).out.map(([x, z]) => [x, z, 9]).concat(L.towers.map(([x, z]) => [x, z, 8]));
 // landmarks to jump to (standing on Pudong's roads, clear of its buildings): where to stand and which way to look (yaw 0 = north, -π/2 = east)
 const SPOTS = [
   { name: 'Bến Thượng Hải', x: L.west - 4, z: -8, yaw: -Math.PI / 2, at: [L.west - 4, -8] },
@@ -79,6 +80,8 @@ export default function MiniMap({ track, onGo }) {
               </g>
             : <rect key={c.r + ':' + c.c} x={c.x - half} y={c.z - half} width={BLK} height={BLK} rx="1.5" fill={GROUND[c.id] || '#ddd'}><title>{NAMES[c.id]}</title></rect>;
         })}
+        {PUDONG.filter(([x, z]) => x < X1 && z > Z0 && z < Z1).map(([x, z, w]) => <rect key={x + ':' + z} x={x - w / 2} y={z - w / 2} width={w} height={w} rx="1" fill="#a7b3bf" />)}
+        <rect x={L.east} y={-ROAD / 2} width={X1 - L.east} height={ROAD} fill="#8d9298" />
         {[[L.pearl, '#e0569a', 6], [L.tower, '#6f9cbc', 7], [L.jinmao, '#8b98a3', 5], [L.swfc, '#a3bed2', 6]].map(([[x, z], c, r]) => <circle key={x + ':' + z} cx={x} cy={z} r={r} fill={c} />)}
         {SPOTS.map(s => (
           <g key={s.name} className="mm-spot" onClick={() => onGo({ x: s.x, z: s.z, yaw: s.yaw })} role="button" aria-label={`Tới ${s.name}`}>

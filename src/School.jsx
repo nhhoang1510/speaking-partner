@@ -12,6 +12,7 @@ import { Furniture, RoomFloor, hsl } from './world/props.jsx';
 import { Person } from './world/people.jsx';
 import { Bake } from './world/bake.jsx';
 import { Night, isNight } from './world/time.js';
+import { Rain } from './world/rain.jsx';
 import { City, Storefront, blockedCity, LOTS, WALK_X, WALK_Z, EDGE_X, EDGE_Z, IN_W, IN_D, roofOf } from './world/city.jsx';
 
 const MOBILE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -359,9 +360,10 @@ const KEYS = { KeyW: [0, 1], ArrowUp: [0, 1], KeyS: [0, -1], ArrowDown: [0, -1],
 
 // walk: I steer my own character (input.jx/jy come from the on-screen stick); onRoom(id|null) when I step
 // into or out of a room; onMove(x, z) now and then, so others see where I am
-export default function School({ users, meId, stars = {}, sky = 'auto', focus, fit = 1, nonce = 0, onPick, walk = false, input, onMove, onRoom, track }) {
+export default function School({ users, meId, stars = {}, sky = 'auto', rain = false, focus, fit = 1, nonce = 0, onPick, walk = false, input, onMove, onRoom, track }) {
   const [now, setNow] = useState(Date.now());
   const night = isNight(sky, new Date(now));
+  const wet = walk && rain;                           // rain only shows while walking
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
   const pilot = useMemo(() => ({ pos: new THREE.Vector3(), room: undefined, input: {}, yaw: Math.PI / 2, pitch: -0.05 }), []);
   Object.assign(pilot, { on: walk, input: input || pilot.input, onMove, onRoom });
@@ -401,13 +403,14 @@ export default function School({ users, meId, stars = {}, sky = 'auto', focus, f
       onCreated={st => { if (import.meta.env.DEV) window.__r3f = st; }} onPointerMissed={() => { document.body.style.cursor = ''; }}>
       <Quality />
       <Night.Provider value={night}>
-      <color attach="background" args={[night ? (walk ? '#0e1726' : '#1b2638') : walk ? '#cfe6f5' : '#dfe9d3']} />
-      {walk && !night && <Sky distance={4000} sunPosition={[60, 40, 30]} turbidity={4} rayleigh={1.2} mieCoefficient={0.004} />}
-      {walk && night && <Stars radius={300} depth={60} count={2500} factor={6} fade speed={0.4} />}
-      {walk && <fog attach="fog" args={[night ? '#131d2e' : '#dbe9f2', 90, 320]} />}
+      <color attach="background" args={[night ? (walk ? (wet ? '#0b111b' : '#0e1726') : '#1b2638') : walk ? (wet ? '#9aa6b1' : '#cfe6f5') : '#dfe9d3']} />
+      {walk && !night && !wet && <Sky distance={4000} sunPosition={[60, 40, 30]} turbidity={4} rayleigh={1.2} mieCoefficient={0.004} />}
+      {walk && night && !wet && <Stars radius={300} depth={60} count={2500} factor={6} fade speed={0.4} />}
+      {walk && <fog attach="fog" args={wet ? [night ? '#0d141f' : '#9aa6b1', 30, 170] : [night ? '#131d2e' : '#dbe9f2', 90, 320]} />}
+      {wet && <Rain />}
       <hemisphereLight args={night ? ['#9fb3e0', '#202838', walk ? 0.45 : 0.75] : ['#fffaf0', walk ? '#efe6d6' : '#b7c49f', 1]} />
       {walk && <ambientLight intensity={night ? 0.18 : 0.55} color={night ? '#9fb3e0' : '#fff4e6'} />}
-      <directionalLight position={[30, 50, 22]} intensity={night ? 0.45 : 1.5} color={night ? '#a9bcff' : '#ffffff'} castShadow={!MOBILE} shadow-mapSize={[4096, 4096]}
+      <directionalLight position={[30, 50, 22]} intensity={night ? 0.45 : wet ? 0.7 : 1.5} color={night ? '#a9bcff' : '#ffffff'} castShadow={!MOBILE} shadow-mapSize={[4096, 4096]}
         shadow-camera-left={-105} shadow-camera-right={105} shadow-camera-top={95} shadow-camera-bottom={-95} shadow-camera-far={220} shadow-bias={-0.0005} />
       <Bake key={(walk ? 'walk' : 'view') + (night ? ':night' : '')}>
       <City walk={walk} />

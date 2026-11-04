@@ -16,7 +16,7 @@ const LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname);
 // the AI is chosen by where the page runs, not by the user: the deployed site uses the cloud,
 // a local dev server uses Ollama on this computer
 const AI = LOCAL ? { provider: 'ollama', url: 'http://localhost:11434', model: 'llama3.2:3b' } : { provider: 'cloud' };
-const DEFAULTS = { level: 'intermediate', voice: '', rate: 1, pause: 1.4, showAi: true, feedback: true, sky: 'auto' };
+const DEFAULTS = { level: 'intermediate', voice: '', rate: 1, pause: 1.4, showAi: true, feedback: true, sky: 'auto', rain: false };
 const spring = { type: 'spring', stiffness: 260, damping: 26 };
 const SCENE = Object.fromEntries(SCENES.map(s => [s.id, s]));
 const STATUS = {
@@ -219,7 +219,7 @@ export default function App() {
     <MotionConfig reducedMotion="user">
       <div className="world" aria-label="Sơ đồ trường học">
         <Suspense fallback={null}>
-          <School users={users} meId={meLocal.id} stars={prog.room} sky={cfg.sky} focus={s.scene ? s.scene.id : null} fit={view.fit} nonce={view.n} onPick={pick}
+          <School users={users} meId={meLocal.id} stars={prog.room} sky={cfg.sky} rain={cfg.rain} focus={s.scene ? s.scene.id : null} fit={view.fit} nonce={view.n} onPick={pick}
             walk={walk} input={stick.current} onMove={onMove} onRoom={onRoom} track={track} />
         </Suspense>
       </div>
@@ -768,6 +768,7 @@ function Settings({ cfg, set, onClose }) {
             <button key={k} role="radio" aria-checked={cfg.sky === k} className={cfg.sky === k ? 'on' : ''} onClick={() => set({ sky: k })}>{label}</button>
           ))}
         </div>
+        <label className="switch"><input type="checkbox" checked={cfg.rain} onChange={e => set({ rain: e.target.checked })} /><span />Trời mưa <small>khi hoá thân dạo phố</small></label>
         <label className="switch"><input type="checkbox" checked={cfg.feedback} onChange={e => set({ feedback: e.target.checked })} /><span />Sửa câu của tôi</label>
 
       </motion.aside>
