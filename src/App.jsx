@@ -4,7 +4,7 @@ import { Engine, canListen } from './lib/engine.js';
 import { checkAI } from './lib/llm.js';
 import { SCENES, LEVELS } from './scenes.js';
 import { Room, COLORS, loadMe, saveMe } from './lib/room.js';
-import { loadHistory, saveSession, deleteSession, snapshot, memoryFor } from './lib/history.js';
+import { loadHistory, saveSession, deleteSession, snapshot, memoryFor, progress, stars } from './lib/history.js';
 import { Listener, voiceFor } from './lib/listen.js';
 
 // the whole app is the 3D school; panels float around it
@@ -79,6 +79,7 @@ export default function App() {
   const prevUsers = useRef(null);
   const [right, setRight] = useState('feed');         // right panel when not in a conversation: 'feed' | 'history' | a past session
   const [history, setHistory] = useState(loadHistory);
+  const prog = useMemo(progress, [history]);
   const [walk, setWalk] = useState(false);             // "hoá thân": I walk my own character around
   const [walkRoom, setWalkRoom] = useState(null);      // the room I'm standing in while walking
   const stick = useRef({});                            // the on-screen joystick, read by the 3D scene
@@ -203,24 +204,24 @@ export default function App() {
     <MotionConfig reducedMotion="user">
       <div className="world" aria-label="Sơ đồ trường học">
         <Suspense fallback={null}>
-          <School users={users} meId={meLocal.id} focus={s.scene ? s.scene.id : null} fit={view.fit} nonce={view.n} onPick={pick}
+          <School users={users} meId={meLocal.id} stars={prog.room} focus={s.scene ? s.scene.id : null} fit={view.fit} nonce={view.n} onPick={pick}
             walk={walk} input={stick.current} onMove={onMove} onRoom={onRoom} />
         </Suspense>
       </div>
       <AnimatePresence>{booting && <Preloader key="pre" />}</AnimatePresence>
 
       <div className={'hud' + (s.scene ? ' in-room' : '') + (walk ? ' walking' : '')} data-sheet={sheet || ''} style={{ '--h': hue }}>
-        <TopBar s={s} cfg={cfg} set={set} n={users.length} onSettings={() => setPanel(true)} onLeave={leave} onEnd={() => eng.end()} />
+        <TopBar s={s} cfg={cfg} set={set} n={users.length} streak={prog.streak} onSettings={() => setPanel(true)} onLeave={leave} onEnd={() => eng.end()} />
 
         <aside className="panel left" aria-label="Phòng học và mọi người">
-          <Rooms users={users} current={s.scene} onPick={pick} />
+          <Rooms users={users} current={s.scene} onPick={pick} done={prog.room} />
           <People users={users} meId={meLocal.id} ok={online.ok} listening={listening} onListen={toggleListen} />
         </aside>
 
         <aside className="panel right" aria-label={s.scene ? 'Hội thoại' : 'Hoạt động'}>
           {s.scene ? <Talk s={s} eng={eng} cfg={cfg} onClose={leave} />
             : right === 'feed' ? <Feed feed={feed} ai={ai} tabs={<RightTabs right={right} setRight={setRight} />} />
-            : right === 'history' ? <History history={history} tabs={<RightTabs right={right} setRight={setRight} />} onOpen={setRight}
+            : right === 'history' ? <History history={history} prog={prog} tabs={<RightTabs right={right} setRight={setRight} />} onOpen={setRight}
                 onDelete={id => setHistory(deleteSession(id))} />
             : <Session x={right} onBack={() => setRight('history')} onAgain={() => pick(SCENE[right.scene])} />}
         </aside>
@@ -260,13 +261,14 @@ function Preloader() {
 
 
 // ---------------------------------------------------------------- panels
-function TopBar({ s, cfg, set, n, onSettings, onLeave, onEnd }) {
+function TopBar({ s, cfg, set, n, streak, onSettings, onLeave, onEnd }) {
   return (
     <header className="topbar glass">
       <div className="brand">
         <span className="logo">S</span>
         <span className="brand-name">THPT Nguyễn Thái Học</span>
         <span className="online"><i />{n}<span className="wide"> online</span></span>
+        {streak > 0 && <span className="streak" title={`Luyện ${streak} ngày liên tiếp`}><Flame />{streak}<span className="wide"> ngày</span></span>}
       </div>
       {s.scene
         ? <div className="top-actions">
@@ -288,7 +290,12 @@ function TopBar({ s, cfg, set, n, onSettings, onLeave, onEnd }) {
   );
 }
 
-function Rooms({ users, current, onPick }) {
+function Flame() {
+  return <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 2s5 4.6 5 10a5 5 0 0 1-10 0c0-2.2 1.2-3.9 2.2-5 .2 1.6 1 2.8 2.3 3.3C11 7.5 12 2 12 2zm0 20a7 7 0 0 0 7-7c0-1.5-.4-2.9-1-4.1-.4 2.6-2.1 4.1-3.6 4.1 1-2.1.4-4.6-.4-6-1.4 1.8-5 4-5 7a3 3 0 0 0 3 3v3z" /></svg>;
+}
+const Stars = ({ n }) => n ? <span className="stars" aria-label={`${n} sao`}>{'★'.repeat(n)}<i>{'★'.repeat(3 - n)}</i></span> : null;
+
+function Rooms({ users, current, onPick, done }) {
   const count = {};
   users.forEach(u => { if (u.scene) count[u.scene] = (count[u.scene] || 0) + 1; });
   return (
@@ -299,7 +306,7 @@ function Rooms({ users, current, onPick }) {
           <li key={sc.id}>
             <button className={current && current.id === sc.id ? 'on' : ''} style={{ '--h': sc.hue }} onClick={() => onPick(sc)}>
               <span className="avatar">{sc.name.replace('Mr. ', '').replace('Dr. ', '')[0]}</span>
-              <span className="r-t"><b>{sc.title}</b><small>{sc.vi}</small></span>
+              <span className="r-t"><b>{sc.title} <Stars n={stars(done[sc.id])} /></b><small>{sc.vi}</small></span>
               {count[sc.id] ? <span className="r-n">{count[sc.id]}</span> : null}
             </button>
           </li>
@@ -372,10 +379,35 @@ function Feed({ feed, ai, tabs }) {
   );
 }
 
-function History({ history, tabs, onOpen, onDelete }) {
+const WEEKDAY = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+// today against the daily goal, the streak, the last seven days and how many rooms have been tried
+function Progress({ prog }) {
+  const pct = Math.min(1, prog.today / prog.goal), top = Math.max(prog.goal, ...prog.week.map(d => d.n));
+  const tried = SCENES.filter(sc => prog.room[sc.id] && prog.room[sc.id].sessions).length;
+  return (
+    <div className="progress">
+      <div className="goal-ring" style={{ "--p": pct }}>
+        <svg viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15.5" /><circle cx="18" cy="18" r="15.5" className="on" /></svg>
+        <b>{prog.today}</b><small>/{prog.goal}</small>
+      </div>
+      <div className="p-text">
+        <b>{prog.today >= prog.goal ? 'Xong mục tiêu hôm nay!' : prog.today ? `Còn ${prog.goal - prog.today} câu nữa là đạt mục tiêu` : `Hôm nay nói ${prog.goal} câu nhé`}</b>
+        <span>{prog.streak ? `${prog.streak} ngày liên tiếp` : 'Chưa có chuỗi ngày'} · {tried}/{SCENES.length} phòng đã thử · {prog.total} câu tất cả</span>
+        <div className="week" aria-label="Số câu 7 ngày qua">
+          {prog.week.map((d, i) => (
+            <span key={i} title={`${d.n} câu`}><i style={{ height: `${Math.max(d.n ? 12 : 4, (d.n / top) * 100)}%` }} className={d.n >= prog.goal ? 'full' : d.n ? 'some' : ''} /><small>{WEEKDAY[d.d]}</small></span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function History({ history, prog, tabs, onOpen, onDelete }) {
   return (
     <section className="glass sec history">
       {tabs}
+      <Progress prog={prog} />
       <p className="muted small">Các buổi luyện được lưu trên máy này. Nhân vật trong phòng sẽ nhớ lần trước bạn nói gì.</p>
       <ul>
         {history.map(x => {

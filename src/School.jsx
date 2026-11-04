@@ -7,6 +7,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Html, OrbitControls, PerspectiveCamera, Sky } from '@react-three/drei';
 import * as THREE from 'three';
 import { SCENES } from './scenes.js';
+import { stars as starsOf } from './lib/history.js';
 import { Furniture, RoomFloor, hsl } from './world/props.jsx';
 import { Person } from './world/people.jsx';
 import { Bake } from './world/bake.jsx';
@@ -245,7 +246,7 @@ const PAINT = {
   accounting: ['#f6efd2', '#b8952e'], finance: ['#dcefeb', '#1f6f68'], tax: ['#f4e1dc', '#a8432f'], bank: ['#e1e6f4', '#2f3f7a'],
 };
 
-function Room({ room, count, busy, mine, onPick, viewer, full }) {
+function Room({ room, count, busy, mine, onPick, viewer, full, star }) {
   const [hover, setHover] = useState(false);
   const label = useRef();
   useFrame(() => {
@@ -269,11 +270,38 @@ function Room({ room, count, busy, mine, onPick, viewer, full }) {
       </group>
       <Html position={full ? [0, 2.6, 0] : [0, roofOf(sc.id) + 1.3, -2.4]} center zIndexRange={[8, 0]}>
         <button ref={label} className={'w-room' + (mine ? ' mine' : '') + (hover ? ' hover' : '')} style={{ '--c': hsl(sc.hue, 55, 45) }} onClick={() => onPick(sc)}>
-          {sc.title}<small>{sc.name}{count ? ` · ${count} người` : ''}</small>
+          <span>{sc.title}{star ? <em className="w-star">{'★'.repeat(star)}</em> : null}</span><small>{sc.name}{count ? ` · ${count} người` : ''}</small>
         </button>
       </Html>
     </group>
   );
+}
+
+// ---------------------------------------------------------------- quality
+// steps down when frames come too slowly (weak laptops, phones): first sharpness, then shadows drawn every
+// few frames instead of every frame, then no shadows at all; never steps back up, so it doesn't flicker
+function Quality() {
+  const { gl, scene, setDpr } = useThree();
+  const st = useRef({ level: 3, t: 0, n: 0, frame: 0, wait: 2 });
+  useFrame((_, dt) => {
+    const q = st.current;
+    q.frame++;
+    if (q.level <= 1 && gl.shadowMap.enabled) gl.shadowMap.needsUpdate = q.frame % 4 === 0;
+    q.t += Math.min(dt, 0.5); q.n++;
+    if (q.t < 2) return;
+    const fps = q.n / q.t; q.t = 0; q.n = 0;
+    if (q.wait > 0) { q.wait--; return; }               // let the town bake and settle first
+    if (fps > 28 || q.level === 0) return;
+    q.level--; q.wait = 1;
+    if (q.level === 2) setDpr(Math.min(1, window.devicePixelRatio));
+    if (q.level === 1) gl.shadowMap.autoUpdate = false;
+    if (q.level === 0) {
+      gl.shadowMap.enabled = false;
+      scene.traverse(o => { if (o.material) [].concat(o.material).forEach(m => { m.needsUpdate = true; }); });
+    }
+    if (import.meta.env.DEV) console.log('[quality]', q.level, Math.round(fps) + ' fps');
+  });
+  return null;
 }
 
 // ---------------------------------------------------------------- camera: overview, or close on my room
@@ -319,7 +347,7 @@ const KEYS = { KeyW: [0, 1], ArrowUp: [0, 1], KeyS: [0, -1], ArrowDown: [0, -1],
 
 // walk: I steer my own character (input.jx/jy come from the on-screen stick); onRoom(id|null) when I step
 // into or out of a room; onMove(x, z) now and then, so others see where I am
-export default function School({ users, meId, focus, fit = 1, nonce = 0, onPick, walk = false, input, onMove, onRoom }) {
+export default function School({ users, meId, stars = {}, focus, fit = 1, nonce = 0, onPick, walk = false, input, onMove, onRoom }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
   const pilot = useMemo(() => ({ pos: new THREE.Vector3(), room: undefined, input: {}, yaw: Math.PI / 2, pitch: -0.05 }), []);
@@ -356,6 +384,7 @@ export default function School({ users, meId, focus, fit = 1, nonce = 0, onPick,
   return (
     <Canvas orthographic shadows={!MOBILE} dpr={MOBILE ? (walk ? 1 : [1, 1.5]) : [1, 2]} camera={{ position: [32, 34, 40], zoom: 12, near: -300, far: 900 }}
       onCreated={st => { if (import.meta.env.DEV) window.__r3f = st; }} onPointerMissed={() => { document.body.style.cursor = ''; }}>
+      <Quality />
       <color attach="background" args={[walk ? '#cfe6f5' : '#dfe9d3']} />
       {walk && <Sky distance={4000} sunPosition={[60, 40, 30]} turbidity={4} rayleigh={1.2} mieCoefficient={0.004} />}
       {walk && <fog attach="fog" args={['#dbe9f2', 90, 320]} />}
@@ -367,7 +396,7 @@ export default function School({ users, meId, focus, fit = 1, nonce = 0, onPick,
       <City walk={walk} />
       {Object.values(ROOMS).map(r => (
         <Room key={r.scene.id} room={r} count={count[r.scene.id]} busy={busy[r.scene.id]}
-              mine={mine && mine.scene === r.scene.id} onPick={onPick} viewer={pilot} full={walk} />
+              mine={mine && mine.scene === r.scene.id} star={starsOf(stars[r.scene.id])} onPick={onPick} viewer={pilot} full={walk} />
       ))}
       </Bake>
       {users.map(u => <Learner key={u.id} u={u} target={targets[u.id]} me={u.id === meId} now={now} pilot={u.id === meId ? pilot : null} viewer={pilot} />)}

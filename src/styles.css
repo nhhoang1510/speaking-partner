@@ -438,3 +438,26 @@ html, body, #root { height: 100%; overflow: hidden; }
               color: var(--ink); font-size: 16px; cursor: pointer; display: grid; place-items: center; }
 .close-room:hover { background: var(--accent-soft); }
 .after-sum { display: flex; justify-content: center; padding: 6px 0 12px; }
+
+/* ---------------------------------------------------------------- progress */
+.streak { display: inline-flex; align-items: center; gap: 3px; font: 700 12.5px var(--sans); color: #d9632b; padding: 2px 8px 2px 6px;
+  border-radius: 999px; background: color-mix(in srgb, #d9632b 14%, transparent); white-space: nowrap; }
+.stars { color: #e3a21a; font-size: 11px; letter-spacing: 1px; margin-left: 4px; }
+.stars i { font-style: normal; color: color-mix(in srgb, var(--muted) 35%, transparent); }
+.w-star { font-style: normal; color: #e3a21a; margin-left: 4px; font-size: 11px; }
+.w-room.mine .w-star { color: #ffe08a; }
+.progress { display: flex; gap: 12px; align-items: center; padding: 12px; border-radius: 16px; background: var(--accent-soft); margin-bottom: 10px; }
+.goal-ring { position: relative; width: 62px; height: 62px; flex: none; display: grid; place-items: center; grid-auto-flow: column; align-content: center; }
+.goal-ring svg { position: absolute; inset: 0; transform: rotate(-90deg); }
+.goal-ring circle { fill: none; stroke: color-mix(in srgb, var(--muted) 22%, transparent); stroke-width: 3.4; }
+.goal-ring circle.on { stroke: var(--ok); stroke-linecap: round; stroke-dasharray: 97.4; stroke-dashoffset: calc(97.4 * (1 - var(--p))); transition: stroke-dashoffset .6s; }
+.goal-ring b { font: 700 18px var(--sans); }
+.goal-ring small { font: 600 11px var(--sans); color: var(--muted); align-self: end; margin-bottom: 3px; }
+.p-text { display: grid; gap: 3px; min-width: 0; font-size: 13px; }
+.p-text > span { color: var(--muted); font-size: 12px; }
+.week { display: flex; gap: 6px; height: 46px; margin-top: 4px; }
+.week span { flex: 1; display: grid; grid-template-rows: 1fr auto; justify-items: center; gap: 2px; min-width: 0; }
+.week i { align-self: end; width: 100%; max-width: 16px; border-radius: 4px 4px 2px 2px; background: color-mix(in srgb, var(--muted) 22%, transparent); }
+.week i.some { background: color-mix(in srgb, var(--ok) 55%, transparent); }
+.week i.full { background: var(--ok); }
+.week small { font: 600 10px var(--sans); color: var(--muted); }
