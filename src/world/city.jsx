@@ -12,8 +12,9 @@
 import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { B, C, S, rnd } from './props.jsx';
-import { Many, Tree, Car, Lamp, tex } from './campus.jsx';
+import { Many, Tree, Car, Lamp, tex } from './scenery.jsx';
 import { KINDS, Block, signTexture, stripes } from './blocks.jsx';
+import { Bake } from './bake.jsx';
 import { Outskirts } from './outskirts.jsx';
 
 const LAYOUT = [
@@ -259,7 +260,7 @@ function Traffic() {
     });
   });
   return MOVERS.map(([, , c], i) => (
-    <group key={i} ref={el => { refs.current[i] = el; }} userData={{ live: true }}><Car x={0} z={0} c={c} /></group>
+    <group key={i} ref={el => { refs.current[i] = el; }} userData={{ live: true }}><Bake><Car x={0} z={0} c={c} /></Bake></group>
   ));
 }
 

@@ -4,7 +4,8 @@
 import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { B, C, rnd } from './props.jsx';
-import { Many, Clouds, tex } from './campus.jsx';
+import { Many, Clouds, tex } from './scenery.jsx';
+import { Bake } from './bake.jsx';
 
 const FAR = 260;                                            // how far the countryside reaches from the centre
 
@@ -13,7 +14,7 @@ function Train({ z }) {
   useFrame(({ clock }) => { if (g.current) g.current.position.x = ((clock.elapsedTime * 12) % (2 * FAR)) - FAR; });
   const cars = ['#c0392b', '#ecf0f1', '#ecf0f1', '#ecf0f1', '#ecf0f1'];
   return (
-    <group ref={g} position={[0, 0, z]} userData={{ live: true }}>
+    <group ref={g} position={[0, 0, z]} userData={{ live: true }}><Bake>
       {cars.map((c, i) => (
         <group key={i} position={[-i * 6.4, 0, 0]}>
           <B p={[0, 1.65, 0]} s={[6, 2.4, 2.6]} c={c} metal={0.3} rough={0.4} />
@@ -23,7 +24,7 @@ function Train({ z }) {
         </group>
       ))}
       <B p={[3.3, 1.5, 0]} s={[0.8, 2, 2.4]} c="#c0392b" />
-    </group>
+    </Bake></group>
   );
 }
 

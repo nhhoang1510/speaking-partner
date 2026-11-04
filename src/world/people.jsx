@@ -3,6 +3,9 @@
 // always looks the same; room staff wear the outfit of their job.
 import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
+import { Bake } from './bake.jsx';
+
+const J = { joint: true };   // a moving part: its pieces are baked together, apart from the rest of the body
 
 const SKINS = ['#f3d2b3', '#e8b98f', '#d7a274', '#b07850', '#8d5a3b', '#f6dcc4'];
 const HAIRS = ['#2b1d14', '#4a3426', '#7a4a2a', '#c8a15a', '#1c1c1c', '#9b4a2c', '#6b6b6b'];
@@ -17,9 +20,9 @@ export function looks(seed) {
 
 const M = ({ c, rough = 0.75 }) => <meshStandardMaterial color={c} roughness={rough} />;
 const Cap = ({ p = [0, 0, 0], r, l, c, s }) => (
-  <mesh position={p} scale={s} castShadow><capsuleGeometry args={[r, l, 4, 10]} /><M c={c} /></mesh>
+  <mesh position={p} scale={s} castShadow><capsuleGeometry args={[r, l, 3, 8]} /><M c={c} /></mesh>
 );
-const Ball = ({ p, r, c, s }) => <mesh position={p} scale={s} castShadow><sphereGeometry args={[r, 16, 12]} /><M c={c} /></mesh>;
+const Ball = ({ p, r, c, s }) => <mesh position={p} scale={s} castShadow><sphereGeometry args={[r, 12, 9]} /><M c={c} /></mesh>;
 const Box = ({ p, s, c }) => <mesh position={p} castShadow><boxGeometry args={s} /><M c={c} /></mesh>;
 
 // act: a ref the owner updates every frame with { walk, talk, think }
@@ -54,28 +57,28 @@ export function Person({ shirt, seed = 'x', outfit, hair: hairOver, act }) {
   const skin = L.skin, coat = outfit === 'coat', apron = outfit === 'apron', suit = outfit === 'suit', uniform = outfit === 'uniform';
   const pants = suit ? '#2b2f3a' : uniform ? '#2a3550' : L.pants;
   const leg = (side, hip, knee) => (
-    <group ref={hip} position={[side * 0.1, 0.9, 0]}>
+    <group ref={hip} position={[side * 0.1, 0.9, 0]} userData={J}>
       <Cap p={[0, -0.22, 0]} r={0.075} l={0.3} c={pants} />
-      <group ref={knee} position={[0, -0.44, 0]}>
+      <group ref={knee} position={[0, -0.44, 0]} userData={J}><Bake>
         <Cap p={[0, -0.2, 0]} r={0.062} l={0.3} c={pants} />
         <Box p={[0, -0.42, 0.05]} s={[0.12, 0.08, 0.26]} c={L.shoes} />
-      </group>
+      </Bake></group>
     </group>
   );
   const sleeve = coat ? '#f4f6f8' : suit ? '#2b2f3a' : shirt;
   const arm = (side, sh, el) => (
-    <group ref={sh} position={[side * 0.24, 1.4, 0]}>
+    <group ref={sh} position={[side * 0.24, 1.4, 0]} userData={J}>
       <Cap p={[0, -0.15, 0]} r={0.06} l={0.2} c={sleeve} />
-      <group ref={el} position={[0, -0.3, 0]}>
+      <group ref={el} position={[0, -0.3, 0]} userData={J}><Bake>
         <Cap p={[0, -0.12, 0]} r={0.05} l={0.17} c={uniform || suit || coat ? sleeve : skin} />
         <Ball p={[0, -0.27, 0.01]} r={0.055} c={skin} s={[0.9, 1.1, 0.7]} />
-      </group>
+      </Bake></group>
     </group>
   );
   return (
     <group>
       {leg(-1, hipL, kneeL)}{leg(1, hipR, kneeR)}
-      <group ref={chest}>
+      <group ref={chest} userData={J}><Bake>
         {/* hips, torso and the job's outfit */}
         <Cap p={[0, 0.95, 0]} r={0.15} l={0.06} c={pants} s={[1.1, 1, 0.8]} />
         <Cap p={[0, 1.2, 0]} r={0.17} l={0.26} c={suit ? '#2b2f3a' : shirt} s={[1.15, 1, 0.75]} />
@@ -89,7 +92,7 @@ export function Person({ shirt, seed = 'x', outfit, hair: hairOver, act }) {
         {uniform && <Box p={[0.07, 1.33, 0.13]} s={[0.07, 0.04, 0.01]} c="#e5c46b" />}
         {arm(-1, shL, elL)}{arm(1, shR, elR)}
         <Cap p={[0, 1.5, 0]} r={0.05} l={0.06} c={skin} />
-        <group ref={head} position={[0, 1.66, 0]}>
+        <group ref={head} position={[0, 1.66, 0]} userData={J}><Bake>
           <Ball p={[0, 0, 0]} r={0.13} c={skin} s={[0.92, 1.08, 1]} />
           <Ball p={[0, -0.01, 0.12]} r={0.022} c={skin} />
           {[-0.045, 0.045].map(x => <Ball key={x} p={[x, 0.025, 0.112]} r={0.017} c="#222" />)}
@@ -97,13 +100,13 @@ export function Person({ shirt, seed = 'x', outfit, hair: hairOver, act }) {
           <mesh position={[0, -0.06, 0.112]} rotation-x={-0.2}><boxGeometry args={[0.05, 0.01, 0.01]} /><M c="#a0524a" /></mesh>
           {/* hair: short, side part, long, or a bun */}
           <mesh position={[0, 0.03, -0.01]} scale={[0.97, 0.95, 1.02]}>
-            <sphereGeometry args={[0.135, 18, 12, 0, Math.PI * 2, 0, Math.PI / 1.9]} /><M c={hair} rough={0.9} />
+            <sphereGeometry args={[0.135, 14, 9, 0, Math.PI * 2, 0, Math.PI / 1.9]} /><M c={hair} rough={0.9} />
           </mesh>
           {L.style === 1 && <Ball p={[0.05, 0.11, 0.05]} r={0.07} c={hair} s={[1.4, 0.5, 1]} />}
           {L.style === 2 && <Cap p={[0, -0.08, -0.07]} r={0.11} l={0.12} c={hair} s={[1.05, 1, 0.6]} />}
           {L.style === 3 && <Ball p={[0, 0.1, -0.12]} r={0.06} c={hair} />}
-        </group>
-      </group>
+        </Bake></group>
+      </Bake></group>
     </group>
   );
 }

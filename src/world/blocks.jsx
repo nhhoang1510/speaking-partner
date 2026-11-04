@@ -7,7 +7,7 @@ import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { B, C, S, paint, rnd } from './props.jsx';
-import { Tree, Car, Bench } from './campus.jsx';
+import { Tree, Car, Bench } from './scenery.jsx';
 
 export const LOT = 4.9;
 

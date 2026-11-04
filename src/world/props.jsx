@@ -79,7 +79,7 @@ export function B({ p, s, c, r = 0, cast = true, e, ei = 0.6, map, rough = 0.8, 
     </mesh>
   );
 }
-export function C({ p, r: rad, r2, h, c, seg = 20, rough = 0.7, metal = 0, rx = 0, rz = 0, e, o }) {
+export function C({ p, r: rad, r2, h, c, seg = 12, rough = 0.7, metal = 0, rx = 0, rz = 0, e, o }) {
   return (
     <mesh position={p} rotation={[rx, 0, rz]} castShadow receiveShadow>
       <cylinderGeometry args={[rad, r2 == null ? rad : r2, h, seg]} />
@@ -91,7 +91,7 @@ export function C({ p, r: rad, r2, h, c, seg = 20, rough = 0.7, metal = 0, rx = 
 export function S({ p, r: rad, c, sc, e, rough = 0.7 }) {
   return (
     <mesh position={p} scale={sc} castShadow>
-      <sphereGeometry args={[rad, 20, 16]} />
+      <sphereGeometry args={[rad, 12, 9]} />
       <meshStandardMaterial color={c} emissive={e || '#000'} emissiveIntensity={e ? 0.9 : 0} roughness={rough} />
     </mesh>
   );
@@ -162,16 +162,6 @@ export function Frame({ p, w = 0.8, h = 0.6, c = '#7fa6c9', r = 0 }) {     // a 
       <B p={[0, 0, 0]} s={[w, h, 0.04]} c="#5a4232" cast={false} />
       <B p={[0, 0, 0.025]} s={[w - 0.1, h - 0.1, 0.01]} c={c} cast={false} />
       <B p={[-w * 0.15, -h * 0.12, 0.032]} s={[w * 0.35, h * 0.3, 0.005]} c="#f3e2b3" cast={false} />
-    </group>
-  );
-}
-export function Window({ p, w = 1.8, h = 1.1, r = 0 }) {
-  return (
-    <group position={p} rotation-y={r}>
-      <B p={[0, 0, 0]} s={[w + 0.12, h + 0.12, 0.1]} c="#f7f4ee" cast={false} />
-      <B p={[0, 0, 0.03]} s={[w, h, 0.06]} c="#bfe0f2" e="#bfe0f2" ei={0.35} rough={0.1} cast={false} />
-      <B p={[0, 0, 0.07]} s={[0.05, h, 0.02]} c="#f7f4ee" cast={false} /><B p={[0, 0, 0.07]} s={[w, 0.05, 0.02]} c="#f7f4ee" cast={false} />
-      <B p={[0, -h / 2 - 0.1, 0.1]} s={[w + 0.25, 0.06, 0.22]} c="#ece6db" cast={false} />
     </group>
   );
 }
